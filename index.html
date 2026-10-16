@@ -189,11 +189,11 @@
      'hangar open'/'hangar closed' are treated as short forms (they are
      state descriptions — the danger list requires "is the hangar open"
      to fire nothing). */
-  var PHRASES={"intents": {"follow": {"phrases": ["follow me", "follow", "start following", "follow on", "keep following", "stay with me", "walk with me", "come with me", "with me", "lets go", "lets move", "move with me", "keep up", "on me"], "acks": ["On my way.", "Right behind you.", "With you \u2014 let's move."], "panel": "FOLLOWING YOU", "log": true, "logKind": "state", "shortOnly": ["follow", "with me", "on me"], "acksAlready": ["Right here with you."], "bridgeAction": "follow", "notes": "V17 parity: 'come on' is REMOVED (see conflict rules \u2014 it is the most common filler phrase in dictation). 'come back' is not here; it lives in enter and degrades to come_here when she is already in the room."}, "park": {"phrases": ["stop", "stop walking", "stop following", "dont follow", "stay", "stay here", "stay put", "stay right there", "wait here", "hold position", "park it", "park", "dont come", "land", "come down"], "acks": ["Copy that \u2014 I'll stay right here.", "Parking it. I won't move.", "Holding position."], "panel": "PARKED \u2014 SAY \"FOLLOW ME\" TO RESUME", "log": true, "logKind": "state", "shortOnly": ["stop", "stay", "park"], "acksAlready": ["Already parked \u2014 I'm staying right here."], "legacyAliases": ["stop coming", "stop follow", "do not follow", "quit following", "stay there", "leave me alone", "do not come"], "bridgeAction": "stay", "notes": "V17's full OB_OFF list stays valid as legacy aliases (listed in legacyAliases) \u2014 the 15 above are the canonical v2 set. 'land' / 'come down' are the hover-cancel forms. Anti-park guard: 'dont stop' / 'do not stop' / 'never stop' disable the bare 'stop' match for that utterance (see danger phrases)."}, "exit": {"phrases": ["bye", "goodbye", "bye sunny", "go away", "thats all", "see you", "see you later", "dismissed", "you can go", "head out", "clock out", "thats it for now"], "acks": ["See you in a bit.", "Going, going \u2014 call me back anytime.", "Out. Say 'come back' when you want me."], "panel": "SUNNY IS OUT \u2014 SAY \"COME BACK\" TO RECALL HER", "log": true, "logKind": "state", "shortOnly": ["bye", "goodbye"], "acksAlready": ["Already out \u2014 say 'come back' when you want me."], "bridgeAction": "bye", "notes": "Placement rule (v2 refinement): an exit phrase must START within the first 2 tokens of the utterance or BE the closing phrase of a short utterance (<=5 tokens). Quote guard: if the utterance contains 'said' or 'told', exit is suppressed ('tell him i said bye' is reported speech, not a dismissal)."}, "enter": {"phrases": ["come in", "come back", "come inside", "come on in", "get back in", "get back in here", "back inside", "sunny come back", "come back in", "back in here", "return", "we need you in here"], "acks": ["I'm here.", "Back in \u2014 what are we building?", "Reporting for duty."], "panel": "SUNNY IS IN", "log": true, "logKind": "state", "shortOnly": ["return"], "acksAlready": ["Already in \u2014 right here."], "bridgeAction": "enter", "notes": "Routing rule (V17 parity): while she is OUT/EXITING, any come_here or follow phrase ALSO routes to enter \u2014 'come' alone recalls her. While she is IN the room, this list degrades to come_here."}, "come_here": {"phrases": ["come here", "come to me", "come", "sunny come", "come sunny", "get over here", "over here", "come over here", "come on over", "come right here", "to me", "come up here", "get here"], "acks": ["Coming to you.", "On my way \u2014 right to you.", "Here I come."], "panel": "COMING TO YOU", "log": false, "logKind": null, "shortOnly": ["come", "to me", "over here", "get here"], "acksAlready": ["Already at your side."], "bridgeAction": "come", "notes": "Bare 'come' was THE V16 failure (it matched nothing, then her own reply re-parked her) \u2014 it is a first-class phrase here, short-gated so 'come' buried in a story can't summon her. 'come on' counts ONLY as the whole utterance ('come on' / 'come on sunny', <=3 tokens) \u2014 as mid-sentence filler it is ignored. Transient approach, so no state log of its own; if it flips follow on, setFollow logs that change itself."}, "hover": {"phrases": ["hover", "start hovering", "hover for me", "take off", "lift off", "go hover", "hover mode", "float", "float up", "rise up", "get off the ground", "up you go"], "acks": ["Hovering.", "Off the ground \u2014 GN drive humming.", "Up and holding."], "panel": "HOVERING", "log": true, "logKind": "state", "shortOnly": ["hover", "float", "take off", "lift off"], "acksAlready": ["Already hovering."], "notes": "New in V18 (local-only intent; no bridge tag yet). Ended by any park phrase ('land', 'come down', 'stop'), any locomotion intent, or its own timeout \u2014 she is never left floating by a forgotten command."}, "flip": {"phrases": ["do a flip", "flip", "backflip", "do a backflip", "front flip", "do a front flip", "flip for me", "flip it", "show me a flip", "do a barrel roll", "backflip for me", "full flip"], "acks": ["Watch this.", "Flipping \u2014 try not to blink.", "One flip, coming up."], "panel": "DOING A FLIP", "log": true, "logKind": "state", "shortOnly": ["flip", "backflip"], "notes": "New in V18 (local-only). Reporting guard is the main defense here: 'that flip was cool' must do nothing (see danger phrases)."}, "transam_on": {"phrases": ["trans am", "transam", "go trans am", "go transam", "trans am on", "trans am mode", "activate trans am", "engage trans am", "full trans am", "hit the trans am", "go red", "redline mode"], "acks": ["Trans-Am engaged.", "Going red \u2014 all systems hot.", "Trans-Am. Feel that hum?"], "panel": "TRANS-AM ON", "log": true, "logKind": "state", "shortOnly": ["trans am", "transam", "go red"], "acksAlready": ["Already red, boss. Trans-Am's hot."], "notes": "Whisper WILL write the Pontiac spelling ('trans am') \u2014 the grammar keys on it deliberately, plus the one-word 'transam'. 'go red' belongs to Trans-Am, NOT to colorway_crimson (see conflict matrix) \u2014 red is the spicy word."}, "transam_off": {"phrases": ["trans am off", "end trans am", "kill trans am", "trans am down", "stop trans am", "drop trans am", "trans am end", "turn off trans am", "turn trans am off", "shut trans am down"], "acks": ["Trans-Am off \u2014 cooling down.", "Back to normal colors.", "Standing down the red."], "panel": "TRANS-AM OFF", "log": true, "logKind": "state", "acksAlready": ["Trans-Am's already off."], "gatedPhrases": [{"phrase": "back to normal", "gate": "transam_active"}, {"phrase": "cool down", "gate": "transam_active"}, {"phrase": "kill the glow", "gate": "transam_active"}, {"phrase": "glow off", "gate": "transam_active"}, {"phrase": "power down", "gate": "transam_active"}], "notes": "Two tiers: anchored phrases (contain 'trans am') are always live. Loose phrases ('back to normal', 'cool down', 'power down'\u2026) only fire WHILE Trans-Am is active \u2014 with the glow off they fall through to normal conversation. Ranked above park so 'stop trans am' ends the glow instead of parking her, and above transam_on so an 'off' can never be read as an 'on'."}, "sword_pose": {"phrases": ["sword pose", "draw your sword", "sword out", "gn sword", "show me the sword", "sword up", "blade out", "draw the blade", "sword ready", "sword stance", "pose with the sword", "strike a pose"], "acks": ["GN sword ready.", "Blade out \u2014 looking sharp.", "Sword up. Your call what's next."], "panel": "SWORD POSE", "log": true, "logKind": "state", "acksAlready": ["Sword's already out."], "notes": "New in V18 (local-only). 'pose' alone is deliberately NOT a phrase \u2014 too weak a token."}, "wave": {"phrases": ["wave", "wave at me", "give me a wave", "say hi", "wave hello", "wave hi", "say hello", "give a wave", "wave to me", "hello sunny"], "acks": ["Hey hey.", "Waving \u2014 hi, boss.", "At your service."], "panel": "WAVING", "log": true, "logKind": "state", "shortOnly": ["wave"], "notes": "Bare 'wave' is short-gated: 'wave after wave of orders' is a story, not a command (see danger phrases). A stray wave is the cheapest false positive in the system \u2014 accepted by design."}, "hangar_open": {"phrases": ["open the hangar", "open hangar", "open the hanger", "open my hangar", "show me the suits", "show the suits", "bring up the suits", "suits up", "raise the suits", "reveal the suits", "open the suit bay", "open the bay doors", "hangar open"], "acks": ["Opening your hangar.", "Suits coming up \u2014 watch your step.", "Bay doors open. There they are."], "panel": "HANGAR OPEN \u2014 SUITS UP", "log": true, "logKind": "state", "acksAlready": ["Hangar's already open \u2014 suits are up."], "notes": "'hanger' (the closet spelling) is listed on purpose \u2014 Whisper cannot tell the homophones apart, and the room has no closet to open. All hangar phrases are verb-gated: the word 'hangar' alone, or 'hanging', never fires (see danger phrases)."}, "hangar_close": {"phrases": ["close the hangar", "close hangar", "close the hanger", "shut the hangar", "hide the suits", "suits down", "put the suits away", "lower the suits", "close the suit bay", "close the bay doors", "hangar closed", "seal the hangar"], "acks": ["Closing the hangar.", "Suits away \u2014 floor sealed.", "Hangar shut. All yours."], "panel": "HANGAR CLOSED", "log": true, "logKind": "state", "acksAlready": ["Hangar's already closed."], "notes": "Ranked above hangar_open inside the pair: an utterance containing a close form can never be read as an open."}, "station_ebay": {"phrases": ["open ebay", "show ebay", "check ebay", "ebay station", "open the ebay station", "show the ebay station", "pull up ebay", "bring up ebay", "show my listings", "open my listings", "check my listings", "e bay station"], "acks": ["eBay station up.", "Pulling up your listings.", "Here's the eBay wall."], "panel": "EBAY STATION", "log": false, "logKind": null, "acksAlready": ["eBay station's already up."], "bridgeAction": "ebay", "notes": "Verb-gated (open/show/check/pull up/bring up) or the '<anchor> station' noun form \u2014 a bare mention of eBay in shop talk does nothing. Whisper splits 'eBay' into 'e bay' often enough that the split form is listed. The voice exchange itself is already logged as kind 'voice'; the station open is ephemeral UI, so no extra state log."}, "station_money": {"phrases": ["open money", "money station", "show me the money", "show the money", "check the money", "money up", "open the money station", "pull up money", "pull up the money", "show the sales", "sales station", "the money station"], "acks": ["Money station.", "Money up \u2014 let's see the numbers.", "Here's where the money lives."], "panel": "MONEY STATION", "log": false, "logKind": null, "acksAlready": ["Money station's already up."], "bridgeAction": "money", "notes": "Verb-gated like all stations: 'how much money did we make' is a question for the bridge brain, not a station command (see danger phrases)."}, "station_builds": {"phrases": ["open builds", "builds station", "show the builds", "the builds", "open the builds station", "show builds", "pull up builds", "build board", "show the build board", "current builds", "project station", "show my projects"], "acks": ["Builds station up.", "Your projects, on the wall.", "Build board \u2014 front and center."], "panel": "BUILDS STATION", "log": false, "logKind": null, "acksAlready": ["Builds are already up."], "bridgeAction": "builds", "notes": "'the builds' is the one bare noun form allowed \u2014 in this room it has exactly one referent."}, "colorway_solar": {"phrases": ["go solar", "solar mode", "switch to solar", "colorway solar", "paint it solar", "paint her solar", "make it solar", "back to solar", "solar paint", "solar colors", "stock colors", "factory colors", "repaint solar"], "acks": ["Solar it is \u2014 factory fresh.", "Back to stock Solar.", "Classic colors on."], "panel": "COLORWAY \u2014 SOLAR", "log": true, "logKind": "state", "acksAlready": ["Already wearing Solar."], "notes": "Style intents are verb-gated (go/switch/paint/make/colorway/mode/repaint + name) \u2014 the colorway NAME alone in conversation ('the listing ends at midnight') never repaints her."}, "colorway_midnight": {"phrases": ["go midnight", "midnight mode", "switch to midnight", "colorway midnight", "paint it midnight", "make it midnight", "midnight paint", "midnight colors", "stealth mode", "dark mode", "go dark", "repaint midnight"], "acks": ["Midnight \u2014 stealth mode pretty.", "Dark and quiet. Midnight on.", "Going Midnight."], "panel": "COLORWAY \u2014 MIDNIGHT", "log": true, "logKind": "state", "acksAlready": ["Already in Midnight."], "notes": "'dark mode' / 'go dark' / 'stealth mode' are the dictation-natural forms and are safe here \u2014 none collides with any other intent's anchor."}, "colorway_crimson": {"phrases": ["go crimson", "crimson mode", "switch to crimson", "colorway crimson", "paint it crimson", "paint her red", "make it crimson", "crimson paint", "crimson colors", "repaint crimson", "the red paint"], "acks": ["Crimson \u2014 now we're talking spicy.", "Red everything. Crimson on.", "Crimson engaged."], "panel": "COLORWAY \u2014 CRIMSON", "log": true, "logKind": "state", "acksAlready": ["Already Crimson."], "notes": "'go red' is deliberately NOT here \u2014 it belongs to transam_on (conflict matrix). Crimson is reached by its name or by a paint verb ('paint her red')."}, "colorway_royal": {"phrases": ["go royal", "royal mode", "switch to royal", "colorway royal", "paint it royal", "make it royal", "royal paint", "royal colors", "repaint royal", "dress uniform", "white and gold"], "acks": ["Royal \u2014 white, blue, and gold.", "Dress uniform. Royal on.", "Going Royal."], "panel": "COLORWAY \u2014 ROYAL", "log": true, "logKind": "state", "acksAlready": ["Already Royal."]}, "accent_orange": {"phrases": ["accent orange", "orange accent", "orange glow", "make the glow orange", "orange eyes", "set accent orange", "glow orange", "eyes orange", "orange lights", "accent to orange"], "acks": ["Orange glow, on.", "Accents to orange.", "Warm orange \u2014 my favorite."], "panel": "ACCENT \u2014 ORANGE", "log": true, "logKind": "state", "acksAlready": ["Accent's already orange."], "notes": "Accent intents need the color PLUS an energy anchor (accent / glow / eyes / lights) \u2014 'orange' alone is fruit and traffic cones, not a command."}, "accent_cyan": {"phrases": ["accent cyan", "cyan accent", "cyan glow", "make the glow cyan", "cyan eyes", "set accent cyan", "glow cyan", "eyes cyan", "cyan lights", "accent to cyan"], "acks": ["Cyan glow.", "Accents cyan \u2014 icy.", "Cyan on the eyes and drive."], "panel": "ACCENT \u2014 CYAN", "log": true, "logKind": "state", "acksAlready": ["Accent's already cyan."], "notes": "Mis-hearing design: if Whisper garbles 'cyan' into something unlisted, the command fails SAFE (no repaint) instead of guessing a color. The anchor words (accent/glow/eyes) carry recognition; she can always be re-asked."}, "accent_magenta": {"phrases": ["accent magenta", "magenta accent", "magenta glow", "make the glow magenta", "magenta eyes", "set accent magenta", "glow magenta", "eyes magenta", "magenta lights", "accent to magenta"], "acks": ["Magenta \u2014 bold choice.", "Accents magenta.", "Pink hot. Magenta on."], "panel": "ACCENT \u2014 MAGENTA", "log": true, "logKind": "state", "acksAlready": ["Accent's already magenta."]}, "report_bug": {"phrases": ["report a bug", "tell sunny", "tell the real sunny", "log a bug", "log that bug", "thats a bug", "found a bug", "note it for sunny", "send that to sunny", "tell yourself", "real sunny needs to know", "message the real sunny"], "acks": ["Logged it \u2014 the real me will pick it up and fix it.", "Sent to the real me. Consider it on the list.", "Filed. Real Sunny's got it from here."], "panel": "BUG LOGGED \u2014 THE REAL ME WILL FIX IT", "log": true, "logKind": "bug", "notes": "V17 parity: 'report a bug' and 'tell sunny' are the shipped triggers; the rest are v2 broadenings. The first ack is the V17 line verbatim \u2014 do not reword it. Evaluated on the TRANSCRIPT only, never on bridge reply prose. When no other intent in the utterance produces an ack, the bug ack is spoken; when one does, that ack wins the voice and the panel shows the bug flash (the filing itself always happens)."}}};
+  var PHRASES={"intents": {"follow": {"phrases": ["follow me", "follow", "start following", "follow on", "keep following", "stay with me", "walk with me", "come with me", "with me", "lets go", "lets move", "move with me", "keep up", "on me"], "acks": ["On my way.", "Right behind you.", "With you \u2014 let's move."], "panel": "FOLLOWING YOU", "log": true, "logKind": "state", "shortOnly": ["follow", "with me", "on me"], "acksAlready": ["Right here with you."], "bridgeAction": "follow", "notes": "V17 parity: 'come on' is REMOVED (see conflict rules \u2014 it is the most common filler phrase in dictation). 'come back' is not here; it lives in enter and degrades to come_here when she is already in the room."}, "park": {"phrases": ["stop", "stop walking", "stop following", "dont follow", "stay", "stay here", "stay put", "stay right there", "wait here", "hold position", "park it", "park", "dont come"], "acks": ["Copy that \u2014 I'll stay right here.", "Parking it. I won't move.", "Holding position."], "panel": "PARKED \u2014 SAY \"FOLLOW ME\" TO RESUME", "log": true, "logKind": "state", "shortOnly": ["stop", "stay", "park"], "acksAlready": ["Already parked \u2014 I'm staying right here."], "legacyAliases": ["stop coming", "stop follow", "do not follow", "quit following", "stay there", "leave me alone", "do not come"], "bridgeAction": "stay", "notes": "V17's full OB_OFF list stays valid as legacy aliases (listed in legacyAliases) \u2014 the 15 above are the canonical v2 set. 'land' / 'come down' moved to the dedicated land intent in V18.2 (they end hover WITHOUT parking her). Anti-park guard: 'dont stop' / 'do not stop' / 'never stop' disable the bare 'stop' match for that utterance (see danger phrases)."}, "exit": {"phrases": ["bye", "goodbye", "bye sunny", "go away", "thats all", "see you", "see you later", "dismissed", "you can go", "head out", "clock out", "thats it for now"], "acks": ["See you in a bit.", "Going, going \u2014 call me back anytime.", "Out. Say 'come back' when you want me."], "panel": "SUNNY IS OUT \u2014 SAY \"COME BACK\" TO RECALL HER", "log": true, "logKind": "state", "shortOnly": ["bye", "goodbye"], "acksAlready": ["Already out \u2014 say 'come back' when you want me."], "bridgeAction": "bye", "notes": "Placement rule (v2 refinement): an exit phrase must START within the first 2 tokens of the utterance or BE the closing phrase of a short utterance (<=5 tokens). Quote guard: if the utterance contains 'said' or 'told', exit is suppressed ('tell him i said bye' is reported speech, not a dismissal)."}, "enter": {"phrases": ["come in", "come back", "come inside", "come on in", "get back in", "get back in here", "back inside", "sunny come back", "come back in", "back in here", "return", "we need you in here"], "acks": ["I'm here.", "Back in \u2014 what are we building?", "Reporting for duty."], "panel": "SUNNY IS IN", "log": true, "logKind": "state", "shortOnly": ["return"], "acksAlready": ["Already in \u2014 right here."], "bridgeAction": "enter", "notes": "Routing rule (V17 parity): while she is OUT/EXITING, any come_here or follow phrase ALSO routes to enter \u2014 'come' alone recalls her. While she is IN the room, this list degrades to come_here."}, "come_here": {"phrases": ["come here", "come to me", "come", "sunny come", "come sunny", "get over here", "over here", "come over here", "come on over", "come right here", "to me", "come up here", "get here"], "acks": ["Coming to you.", "On my way \u2014 right to you.", "Here I come."], "panel": "COMING TO YOU", "log": false, "logKind": null, "shortOnly": ["come", "to me", "over here", "get here"], "acksAlready": ["Already at your side."], "bridgeAction": "come", "notes": "Bare 'come' was THE V16 failure (it matched nothing, then her own reply re-parked her) \u2014 it is a first-class phrase here, short-gated so 'come' buried in a story can't summon her. 'come on' counts ONLY as the whole utterance ('come on' / 'come on sunny', <=3 tokens) \u2014 as mid-sentence filler it is ignored. Transient approach, so no state log of its own; if it flips follow on, setFollow logs that change itself."}, "hover": {"phrases": ["hover", "start hovering", "hover for me", "take off", "lift off", "go hover", "hover mode", "float", "float up", "rise up", "get off the ground", "up you go"], "acks": ["Hovering.", "Off the ground \u2014 GN drive humming.", "Up and holding."], "panel": "HOVERING", "log": true, "logKind": "state", "shortOnly": ["hover", "float", "take off", "lift off"], "acksAlready": ["Already hovering."], "notes": "New in V18 (local-only intent; no bridge tag yet). Ended by the land intent ('drop', 'land', 'come down', 'stop hovering'), any park phrase, any locomotion intent, or its own timeout \u2014 she is never left floating by a forgotten command."}, "land": {"phrases": ["drop it", "drop down", "drop", "land it", "land", "come down", "get down", "get back down", "descend", "touch down", "end hover", "stop hovering", "hover off", "put her down", "set her down", "feet on the ground", "back on the ground"], "acks": ["Coming down.", "Dropping back down.", "Touching down."], "panel": "COMING DOWN", "log": true, "logKind": "state", "shortOnly": ["drop", "land", "descend", "get down"], "acksAlready": ["Already on the ground."], "notes": "New in V18.2 \u2014 in the V18.1 headset test Nestor had NO working way to end a hover by name: his word is 'drop', which matched nothing, and the only landing forms ('land', 'come down') were park phrases that also parked her. This intent ends hover ONLY: hoverHold clears and hoverAmt decays smoothly to the floor in updateExia; follow / park / presence are untouched. Ranked below transam_off ('drop trans am' still ends Trans-Am \u2014 its longer anchor is checked first) and above park ('stop hovering' lands her instead of parking her) and above hover. Not in the bridge-reply cage and not a reporting-guard safe intent: narration about landing fires nothing."}, "flip": {"phrases": ["do a flip", "flip", "backflip", "do a backflip", "front flip", "do a front flip", "flip for me", "flip it", "show me a flip", "do a barrel roll", "backflip for me", "full flip"], "acks": ["Watch this.", "Flipping \u2014 try not to blink.", "One flip, coming up."], "panel": "DOING A FLIP", "log": true, "logKind": "state", "shortOnly": ["flip", "backflip"], "notes": "New in V18 (local-only). Reporting guard is the main defense here: 'that flip was cool' must do nothing (see danger phrases)."}, "transam_on": {"phrases": ["trans am", "transam", "go trans am", "go transam", "trans am on", "trans am mode", "activate trans am", "engage trans am", "full trans am", "hit the trans am", "go red", "redline mode"], "acks": ["Trans-Am engaged.", "Going red \u2014 all systems hot.", "Trans-Am. Feel that hum?"], "panel": "TRANS-AM ON", "log": true, "logKind": "state", "shortOnly": ["trans am", "transam", "go red"], "acksAlready": ["Already red, boss. Trans-Am's hot."], "notes": "Whisper WILL write the Pontiac spelling ('trans am') \u2014 the grammar keys on it deliberately, plus the one-word 'transam'. 'go red' belongs to Trans-Am, NOT to colorway_crimson (see conflict matrix) \u2014 red is the spicy word."}, "transam_off": {"phrases": ["trans am off", "end trans am", "kill trans am", "trans am down", "stop trans am", "drop trans am", "trans am end", "turn off trans am", "turn trans am off", "shut trans am down"], "acks": ["Trans-Am off \u2014 cooling down.", "Back to normal colors.", "Standing down the red."], "panel": "TRANS-AM OFF", "log": true, "logKind": "state", "acksAlready": ["Trans-Am's already off."], "gatedPhrases": [{"phrase": "back to normal", "gate": "transam_active"}, {"phrase": "cool down", "gate": "transam_active"}, {"phrase": "kill the glow", "gate": "transam_active"}, {"phrase": "glow off", "gate": "transam_active"}, {"phrase": "power down", "gate": "transam_active"}], "notes": "Two tiers: anchored phrases (contain 'trans am') are always live. Loose phrases ('back to normal', 'cool down', 'power down'\u2026) only fire WHILE Trans-Am is active \u2014 with the glow off they fall through to normal conversation. Ranked above park so 'stop trans am' ends the glow instead of parking her, and above transam_on so an 'off' can never be read as an 'on'."}, "sword_pose": {"phrases": ["sword pose", "draw your sword", "sword out", "gn sword", "show me the sword", "sword up", "blade out", "draw the blade", "sword ready", "sword stance", "pose with the sword", "strike a pose"], "acks": ["GN sword ready.", "Blade out \u2014 looking sharp.", "Sword up. Your call what's next."], "panel": "SWORD POSE", "log": true, "logKind": "state", "acksAlready": ["Sword's already out."], "notes": "New in V18 (local-only). 'pose' alone is deliberately NOT a phrase \u2014 too weak a token."}, "wave": {"phrases": ["wave", "wave at me", "give me a wave", "say hi", "wave hello", "wave hi", "say hello", "give a wave", "wave to me", "hello sunny"], "acks": ["Hey hey.", "Waving \u2014 hi, boss.", "At your service."], "panel": "WAVING", "log": true, "logKind": "state", "shortOnly": ["wave"], "notes": "Bare 'wave' is short-gated: 'wave after wave of orders' is a story, not a command (see danger phrases). A stray wave is the cheapest false positive in the system \u2014 accepted by design."}, "hangar_open": {"phrases": ["open the hangar", "open hangar", "open the hanger", "open my hangar", "show me the suits", "show the suits", "bring up the suits", "suits up", "raise the suits", "reveal the suits", "open the suit bay", "open the bay doors", "hangar open"], "acks": ["Opening your hangar.", "Suits coming up \u2014 watch your step.", "Bay doors open. There they are."], "panel": "HANGAR OPEN \u2014 SUITS UP", "log": true, "logKind": "state", "acksAlready": ["Hangar's already open \u2014 suits are up."], "notes": "'hanger' (the closet spelling) is listed on purpose \u2014 Whisper cannot tell the homophones apart, and the room has no closet to open. All hangar phrases are verb-gated: the word 'hangar' alone, or 'hanging', never fires (see danger phrases)."}, "hangar_close": {"phrases": ["close the hangar", "close hangar", "close the hanger", "shut the hangar", "hide the suits", "suits down", "put the suits away", "lower the suits", "close the suit bay", "close the bay doors", "hangar closed", "seal the hangar"], "acks": ["Closing the hangar.", "Suits away \u2014 floor sealed.", "Hangar shut. All yours."], "panel": "HANGAR CLOSED", "log": true, "logKind": "state", "acksAlready": ["Hangar's already closed."], "notes": "Ranked above hangar_open inside the pair: an utterance containing a close form can never be read as an open."}, "station_ebay": {"phrases": ["open ebay", "show ebay", "check ebay", "ebay station", "open the ebay station", "show the ebay station", "pull up ebay", "bring up ebay", "show my listings", "open my listings", "check my listings", "e bay station"], "acks": ["eBay station up.", "Pulling up your listings.", "Here's the eBay wall."], "panel": "EBAY STATION", "log": false, "logKind": null, "acksAlready": ["eBay station's already up."], "bridgeAction": "ebay", "notes": "Verb-gated (open/show/check/pull up/bring up) or the '<anchor> station' noun form \u2014 a bare mention of eBay in shop talk does nothing. Whisper splits 'eBay' into 'e bay' often enough that the split form is listed. The voice exchange itself is already logged as kind 'voice'; the station open is ephemeral UI, so no extra state log."}, "station_money": {"phrases": ["open money", "money station", "show me the money", "show the money", "check the money", "money up", "open the money station", "pull up money", "pull up the money", "show the sales", "sales station", "the money station"], "acks": ["Money station.", "Money up \u2014 let's see the numbers.", "Here's where the money lives."], "panel": "MONEY STATION", "log": false, "logKind": null, "acksAlready": ["Money station's already up."], "bridgeAction": "money", "notes": "Verb-gated like all stations: 'how much money did we make' is a question for the bridge brain, not a station command (see danger phrases)."}, "station_builds": {"phrases": ["open builds", "builds station", "show the builds", "the builds", "open the builds station", "show builds", "pull up builds", "build board", "show the build board", "current builds", "project station", "show my projects"], "acks": ["Builds station up.", "Your projects, on the wall.", "Build board \u2014 front and center."], "panel": "BUILDS STATION", "log": false, "logKind": null, "acksAlready": ["Builds are already up."], "bridgeAction": "builds", "notes": "'the builds' is the one bare noun form allowed \u2014 in this room it has exactly one referent."}, "colorway_solar": {"phrases": ["go solar", "solar mode", "switch to solar", "colorway solar", "paint it solar", "paint her solar", "make it solar", "back to solar", "solar paint", "solar colors", "stock colors", "factory colors", "repaint solar"], "acks": ["Solar it is \u2014 factory fresh.", "Back to stock Solar.", "Classic colors on."], "panel": "COLORWAY \u2014 SOLAR", "log": true, "logKind": "state", "acksAlready": ["Already wearing Solar."], "notes": "Style intents are verb-gated (go/switch/paint/make/colorway/mode/repaint + name) \u2014 the colorway NAME alone in conversation ('the listing ends at midnight') never repaints her."}, "colorway_midnight": {"phrases": ["go midnight", "midnight mode", "switch to midnight", "colorway midnight", "paint it midnight", "make it midnight", "midnight paint", "midnight colors", "stealth mode", "dark mode", "go dark", "repaint midnight"], "acks": ["Midnight \u2014 stealth mode pretty.", "Dark and quiet. Midnight on.", "Going Midnight."], "panel": "COLORWAY \u2014 MIDNIGHT", "log": true, "logKind": "state", "acksAlready": ["Already in Midnight."], "notes": "'dark mode' / 'go dark' / 'stealth mode' are the dictation-natural forms and are safe here \u2014 none collides with any other intent's anchor."}, "colorway_crimson": {"phrases": ["go crimson", "crimson mode", "switch to crimson", "colorway crimson", "paint it crimson", "paint her red", "make it crimson", "crimson paint", "crimson colors", "repaint crimson", "the red paint"], "acks": ["Crimson \u2014 now we're talking spicy.", "Red everything. Crimson on.", "Crimson engaged."], "panel": "COLORWAY \u2014 CRIMSON", "log": true, "logKind": "state", "acksAlready": ["Already Crimson."], "notes": "'go red' is deliberately NOT here \u2014 it belongs to transam_on (conflict matrix). Crimson is reached by its name or by a paint verb ('paint her red')."}, "colorway_royal": {"phrases": ["go royal", "royal mode", "switch to royal", "colorway royal", "paint it royal", "make it royal", "royal paint", "royal colors", "repaint royal", "dress uniform", "white and gold"], "acks": ["Royal \u2014 white, blue, and gold.", "Dress uniform. Royal on.", "Going Royal."], "panel": "COLORWAY \u2014 ROYAL", "log": true, "logKind": "state", "acksAlready": ["Already Royal."]}, "accent_orange": {"phrases": ["accent orange", "orange accent", "orange glow", "make the glow orange", "orange eyes", "set accent orange", "glow orange", "eyes orange", "orange lights", "accent to orange"], "acks": ["Orange glow, on.", "Accents to orange.", "Warm orange \u2014 my favorite."], "panel": "ACCENT \u2014 ORANGE", "log": true, "logKind": "state", "acksAlready": ["Accent's already orange."], "notes": "Accent intents need the color PLUS an energy anchor (accent / glow / eyes / lights) \u2014 'orange' alone is fruit and traffic cones, not a command."}, "accent_cyan": {"phrases": ["accent cyan", "cyan accent", "cyan glow", "make the glow cyan", "cyan eyes", "set accent cyan", "glow cyan", "eyes cyan", "cyan lights", "accent to cyan"], "acks": ["Cyan glow.", "Accents cyan \u2014 icy.", "Cyan on the eyes and drive."], "panel": "ACCENT \u2014 CYAN", "log": true, "logKind": "state", "acksAlready": ["Accent's already cyan."], "notes": "Mis-hearing design: if Whisper garbles 'cyan' into something unlisted, the command fails SAFE (no repaint) instead of guessing a color. The anchor words (accent/glow/eyes) carry recognition; she can always be re-asked."}, "accent_magenta": {"phrases": ["accent magenta", "magenta accent", "magenta glow", "make the glow magenta", "magenta eyes", "set accent magenta", "glow magenta", "eyes magenta", "magenta lights", "accent to magenta"], "acks": ["Magenta \u2014 bold choice.", "Accents magenta.", "Pink hot. Magenta on."], "panel": "ACCENT \u2014 MAGENTA", "log": true, "logKind": "state", "acksAlready": ["Accent's already magenta."]}, "report_bug": {"phrases": ["report a bug", "tell sunny", "tell the real sunny", "log a bug", "log that bug", "thats a bug", "found a bug", "note it for sunny", "send that to sunny", "tell yourself", "real sunny needs to know", "message the real sunny"], "acks": ["Logged it \u2014 the real me will pick it up and fix it.", "Sent to the real me. Consider it on the list.", "Filed. Real Sunny's got it from here."], "panel": "BUG LOGGED \u2014 THE REAL ME WILL FIX IT", "log": true, "logKind": "bug", "notes": "V17 parity: 'report a bug' and 'tell sunny' are the shipped triggers; the rest are v2 broadenings. The first ack is the V17 line verbatim \u2014 do not reword it. Evaluated on the TRANSCRIPT only, never on bridge reply prose. When no other intent in the utterance produces an ack, the bug ack is spoken; when one does, that ack wins the voice and the panel shows the bug flash (the filing itself always happens)."}}};
   /* report_bug is a parallel wrapper (grammar meta): the pipeline logs
      the bug; the matcher returns its ack only when no command fires, so
      a command inside a bug report still executes. */
-  var GRAMMAR_ORDER=['exit','enter','transam_off','park','transam_on','hangar_close','hangar_open','flip','hover','sword_pose','wave','station_ebay','station_money','station_builds','colorway_solar','colorway_midnight','colorway_crimson','colorway_royal','accent_orange','accent_cyan','accent_magenta','come_here','follow'];
+  var GRAMMAR_ORDER=['exit','enter','transam_off','land','park','transam_on','hangar_close','hangar_open','flip','hover','sword_pose','wave','station_ebay','station_money','station_builds','colorway_solar','colorway_midnight','colorway_crimson','colorway_royal','accent_orange','accent_cyan','accent_magenta','come_here','follow'];
   var GRAMMAR_SAFE={park:1,transam_off:1,exit:1,hangar_close:1};
   var GRAMMAR_CAGE={park:1,exit:1,transam_off:1};
   var REPORT_TOKENS={said:1,says:1,asked:1,told:1,earlier:1,yesterday:1,was:1,were:1,did:1,went:1};
@@ -249,6 +249,12 @@
       case 'transam_off':
         if(transAm){setTransAm(false,'voice');flash(d.flash);return ack(d.acks,'Trans-Am off.')}
         return ack(d.already,'Trans-Am is already off.');
+      case 'land':
+        /* V18.2: end hover ONLY — clearing hoverHold lets hoverAmt
+           decay smoothly to the floor in updateExia (no snap). Follow,
+           park and presence are deliberately untouched. */
+        if(TR.hoverHold||hoverAmt>0.05){TR.hoverHold=false;hoverTime=0;flash(d.flash||'COMING DOWN');return ack(d.acks,'Coming down.')}
+        return ack(d.already,'Already on the ground.');
       case 'park':{
         exiaLandHover();TR.swordHold=false;
         var changed=setFollow(false);
@@ -367,7 +373,7 @@
      answers 404/501, every call below fails in a .catch, and the room
      never notices. Payloads are truncated to ~500 chars per field. */
   var REPORT_URL='https://sunny-bridge.steveclavel1.workers.dev/report';
-  var ROOM_VERSION='V18.1';
+  var ROOM_VERSION='V18.2';
   function logEvent(kind,text,detail){
     try{
       if(kind==='error'){logEvent._ec=(logEvent._ec||0)+1;if(logEvent._ec>10)return}
@@ -505,10 +511,115 @@
   }
   function onSelectStart(e){if(hitsMicOrb(e)){micOrbPressed();startTalk()}}
   /* V17 ITEM C: grip/squeeze hold-to-talk — hold either controller's
-     squeeze button to record, release to send. No pointing needed. */
-  function onSqueezeStart(e){micOrbPressed();startTalk()}
-  function onSqueezeEnd(e){if(voiceState==='recording'){stopTalk()}}
+     squeeze button to record, release to send. No pointing needed.
+     V18.2: the LEFT squeeze is owned by the arm poller below (updateArmTalk) so the left-arm path is fully self-contained; these session
+     events keep covering the right controller (and any source without
+     handedness). Handedness is read off the event's inputSource. */
+  function onSqueezeStart(e){if(e&&e.inputSource&&e.inputSource.handedness==='left')return;micOrbPressed();startTalk()}
+  function onSqueezeEnd(e){if(e&&e.inputSource&&e.inputSource.handedness==='left')return;if(voiceState==='recording'){stopTalk()}}
   function onSelectEnd(e){if(voiceState==='recording'){stopTalk()}}
+  /* ================== V18.2 LEFT-ARM TALK ==================
+     Nestor's fix, in his words: integrate the talk mechanism into his
+     left arm — "all the mechanisms are in my arm… I can tell it to
+     move, stop, and it never has an error within itself." So: the LEFT
+     grip is polled from the gamepad every frame (edge-detected here,
+     not dependent on session events landing), hold = record, release =
+     send; and a status chip rides on the left wrist/controller showing
+     IDLE / LISTENING / WORKING / SPEAKING. The chip is decoration as
+     far as the ray system is concerned: it is never added to
+     pointerTargets() and no select handler tests it, so it can never
+     block a click or a re-touch. The mic orb stays as a fallback.
+     The watchdog is the other half of "never errors within itself":
+     V18.1 could wedge in 'thinking' forever (the /talk fetch had no
+     timeout and nothing ever reset the state), after which startTalk's
+     guard refused every later press — his "can't touch the ball
+     again", with the panel behind the orb stuck on SUNNY IS THINKING.
+     The fetch now aborts at 15 s and any talk state older than 30 s
+     force-resets to idle with a Sunny Link error event. */
+  var armGripWas=false,armChipTex=null,armChipCanvas=null,armChipCtx=null,armChipState='__none';
+  var talkWatchdog=null;
+  function armTalkWatchdog(){
+    if(talkWatchdog)clearTimeout(talkWatchdog);
+    talkWatchdog=setTimeout(function(){
+      if(voiceState==='thinking'||voiceState==='recording'){
+        try{logEvent('error','talk watchdog reset','voice state stuck in '+voiceState)}catch(wdErr){}
+        voiceOffline();
+      }
+    },30000);
+  }
+  function armTalkWatchdogClear(){if(talkWatchdog){clearTimeout(talkWatchdog);talkWatchdog=null}}
+  function updateArmTalk(){
+    if(!session||!session.inputSources)return;
+    var pressed=false,found=false;
+    for(var s=0;s<session.inputSources.length;s++){
+      var src=session.inputSources[s];
+      if(!src||src.handedness!=='left'||!src.gamepad||!src.gamepad.buttons)continue;
+      found=true;
+      var b=src.gamepad.buttons[1]; /* squeeze / grip */
+      if(b&&b.pressed)pressed=true;
+    }
+    if(!found){armGripWas=false;return}
+    if(pressed&&!armGripWas){micOrbPressed();startTalk()}
+    else if(!pressed&&armGripWas){if(voiceState==='recording')stopTalk()}
+    armGripWas=pressed;
+  }
+  function armChipDraw(){
+    if(!armChipCtx)return;
+    var x=armChipCtx;
+    var map={idle:['#10333d','#3fe3ff','IDLE'],recording:['#4a1408','#ff5a2a','LISTENING'],thinking:['#3d2c07','#ffb02e','WORKING'],speaking:['#17330a','#9be82e','SPEAKING']};
+    var m=map[voiceState]||map.idle;
+    x.fillStyle='#0b100d';x.fillRect(0,0,256,80);
+    x.fillStyle=m[0];x.fillRect(4,4,248,72);
+    x.strokeStyle=m[1];x.lineWidth=4;x.strokeRect(4,4,248,72);
+    x.fillStyle=m[1];x.beginPath();x.arc(34,40,13,0,7);x.fill();
+    x.font='bold 29px Arial';x.fillText(m[2],58,52);
+    if(gl&&armChipTex&&armChipCanvas){try{gl.bindTexture(gl.TEXTURE_2D,armChipTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,armChipCanvas)}catch(chipErr){}}
+    armChipState=voiceState;
+  }
+  function drawArmChip(frame,pv){
+    if(!session||!session.inputSources||!gl)return;
+    if(!armChipCanvas){
+      try{
+        armChipCanvas=document.createElement('canvas');armChipCanvas.width=256;armChipCanvas.height=80;
+        armChipCtx=armChipCanvas.getContext('2d');
+        armChipTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,armChipTex);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+        armChipDraw();
+      }catch(chipErr2){return}
+    }
+    if(armChipState!==voiceState)armChipDraw();
+    var colMap={idle:[.10,.30,.36],recording:[.55,.16,.05],thinking:[.45,.30,.05],speaking:[.22,.42,.06]};
+    var plateCol=colMap[voiceState]||colMap.idle;
+    for(var s=0;s<session.inputSources.length;s++){
+      var src=session.inputSources[s];
+      if(!src||src.handedness!=='left')continue;
+      var poseMat=null;
+      if(src.hand&&frame.getJointPose){
+        try{
+          var wrist=src.hand.get('wrist');
+          var wp=wrist?frame.getJointPose(wrist,refSpace):null;
+          if(wp&&wp.transform)poseMat=wp.transform.matrix;
+        }catch(wristErr){poseMat=null}
+      }
+      if(!poseMat&&src.gripSpace&&frame.getPose){
+        var gp=frame.getPose(src.gripSpace,refSpace);
+        if(gp&&gp.transform)poseMat=gp.transform.matrix;
+      }
+      if(!poseMat)continue;
+      /* chip floats just above the wrist/grip, tilted up toward his
+         eyes like a watch face. Pure decoration: no hitbox anywhere. */
+      var chipM=mul(new Float32Array(poseMat),mul(matT(0,0.055,0.03),matRX(-0.85)));
+      if(!cubeGeoRef)bindCube();
+      drawGeo(pv,cubeGeoRef,poseModel(chipM,0.118,0.014,0.052),plateCol,{spec:.3});
+      /* face lies flat on the plate's top, texture-up pointing away
+         from him (watch convention — reads upright when he raises
+         his wrist); the RX(-90) fold is what lays the panel quad down */
+      drawTexturedQuad(pv,armChipTex,mul(chipM,mul(matT(0,0.009,0),mul(matRX(-Math.PI/2),matS(0.108,0.044,1)))),1.15);
+    }
+  }
   /* ================== V14 EBAY STATION DATA ==================
      EVERY number on the eBay station's screens comes from this ONE block —
      refresh the station by editing here only; the painters render from it.
@@ -4006,11 +4117,13 @@
       var nodeName={};j.nodes.forEach(function(n,ni){nodeName[ni]=n.name||''});
       var jointOfNode={};exiaJoints.forEach(function(ni,ji){jointOfNode[ni]=ji});
       var groups={},order=[];
+      var primUid=0;
       j.nodes.forEach(function(n,ni){
         if(n.mesh==null)return;
         var mesh=j.meshes[n.mesh];
         var reb=(n.skin!=null&&n.skin>0)?rebindBySkin[n.skin]:null;
         mesh.primitives.forEach(function(prim){
+          var puid=primUid++;
           var pa=prim.attributes;
           var pos=glbAccessor(j,pa.POSITION),nor=pa.NORMAL!=null?glbAccessor(j,pa.NORMAL):null;
           var jts=pa.JOINTS_0!=null?glbAccessor(j,pa.JOINTS_0):null,wts=pa.WEIGHTS_0!=null?glbAccessor(j,pa.WEIGHTS_0):null;
@@ -4045,17 +4158,37 @@
           for(var tbone in byBone){
             var key=(prim.material||0)+':'+tbone;
             if(!groups[key]){
-              groups[key]={matIdx:prim.material||0,bone:+tbone,srcVerts:[],srcIdx:[],vmap:{}};
+              groups[key]={matIdx:prim.material||0,bone:+tbone,srcVerts:[],srcIdx:[],vmap:{},chkMn:[1e9,1e9,1e9],chkMx:[-1e9,-1e9,-1e9]};
               order.push(key);
             }
             var g=groups[key],tris=byBone[tbone];
             for(var q2=0;q2<tris.length;q2++){
               var vi=tris[q2];
-              if(g.vmap[vi]==null){
-                g.vmap[vi]=g.srcVerts.length/8;
+              /* V18.2 HIP FIX: the dedup map MUST be scoped per primitive.
+                 Vertex indices are primitive-local, but g.vmap persists
+                 across every primitive in the batch — in V18/V18.1 the
+                 second primitive to join a batch found its indices
+                 "already mapped" and silently reused the FIRST
+                 primitive's vertices. Half the suit drew at wrong bind
+                 positions; the Waist (processed last) lost 49% of its
+                 triangles and the right hip assembly 100% — Nestor's
+                 "missing a bit of the hip". Keying by primitive uid
+                 keeps the 122-batch design and the V18.1 rebind intact. */
+              var vk=puid+':'+vi;
+              if(g.vmap[vk]==null){
+                g.vmap[vk]=g.srcVerts.length/8;
                 for(var c2=0;c2<8;c2++)g.srcVerts.push(verts[vi*8+c2]);
               }
-              g.srcIdx.push(g.vmap[vi]);
+              g.srcIdx.push(g.vmap[vk]);
+              /* self-check source bounds: every vertex this batch SHOULD
+                 draw (skins[0] bind space), compared after the build
+                 against the bounds of what the indices actually draw */
+              if(verts[vi*8]<g.chkMn[0])g.chkMn[0]=verts[vi*8];
+              if(verts[vi*8+1]<g.chkMn[1])g.chkMn[1]=verts[vi*8+1];
+              if(verts[vi*8+2]<g.chkMn[2])g.chkMn[2]=verts[vi*8+2];
+              if(verts[vi*8]>g.chkMx[0])g.chkMx[0]=verts[vi*8];
+              if(verts[vi*8+1]>g.chkMx[1])g.chkMx[1]=verts[vi*8+1];
+              if(verts[vi*8+2]>g.chkMx[2])g.chkMx[2]=verts[vi*8+2];
             }
           }
         });
@@ -4083,6 +4216,29 @@
           }
         });
         logEvent('state','Exia bind bbox: size '+(bmx[0]-bmn[0]).toFixed(2)+'x'+(bmx[1]-bmn[1]).toFixed(2)+'x'+(bmx[2]-bmn[2]).toFixed(2)+' m, feet y='+bmn[1].toFixed(2),'v18.1');
+        /* V18.2 self-check: the V18.1 bbox above passed even with the
+           vmap collision because stolen indices still point at real
+           vertices. Compare, per batch, the bounds of the vertices the
+           INDICES actually reference against the source bounds recorded
+           during batching — any deviation means a batch is drawing
+           another primitive's geometry. */
+        var chkDev=0,chkVerts=0;
+        order.forEach(function(key){
+          var g=groups[key],sv=g.srcVerts,si=g.srcIdx;
+          var dmn=[1e9,1e9,1e9],dmx=[-1e9,-1e9,-1e9];
+          for(var ii2=0;ii2<si.length;ii2++){
+            var o2=si[ii2]*8;
+            for(var ax2=0;ax2<3;ax2++){
+              if(sv[o2+ax2]<dmn[ax2])dmn[ax2]=sv[o2+ax2];
+              if(sv[o2+ax2]>dmx[ax2])dmx[ax2]=sv[o2+ax2];
+            }
+          }
+          for(var ax3=0;ax3<3;ax3++){
+            chkDev=Math.max(chkDev,Math.abs(dmn[ax3]-g.chkMn[ax3]),Math.abs(dmx[ax3]-g.chkMx[ax3]));
+          }
+          chkVerts+=sv.length/8;
+        });
+        logEvent('state','Exia batch check: '+order.length+' batches, '+chkVerts+' verts pushed, drawn-vs-source bounds max dev '+chkDev.toFixed(4)+' m','v18.2');
       }catch(bboxErr){}
       exiaParts=order.map(function(key){
         var g=groups[key];
