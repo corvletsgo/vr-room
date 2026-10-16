@@ -17,7 +17,7 @@
 const ALLOWED_ORIGIN = "https://corvletsgo.github.io";
 const GROQ = "https://api.groq.com/openai/v1";
 const STT_MODEL = "whisper-large-v3-turbo";
-const BRAIN_MODEL = "llama-3.3-70b-versatile";
+const BRAIN_MODEL = "openai/gpt-oss-120b";
 const TTS_MODEL = "canopylabs/orpheus-v1-english";
 const TTS_VOICE = "hannah";
 
@@ -221,7 +221,8 @@ async function thinkOnce(transcript, history, env, stern) {
       body: JSON.stringify({
         model: BRAIN_MODEL,
         messages,
-        max_tokens: 256,
+        max_tokens: 1024,
+        reasoning_effort: "low",
         temperature: 0.6,
       }),
     },
