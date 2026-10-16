@@ -63,25 +63,30 @@
      equipped theme, so swapping a theme recolors her whole body in one
      frame. The ORANGE accent is her signature pairing: orange core with
      the cyan visor kept. His pick persists in localStorage. */
-  var SUNNY_CW_KEYS=['solar','midnight','crimson','royal'];
+  var SUNNY_CW_KEYS=['Solar','Midnight','Crimson','Royal'];
   var SUNNY_COLORWAYS={
     solar:{name:'SOLAR',armor:[.93,.95,.97],armor2:[.84,.87,.89],trim:[.98,.74,.22],dark:[.13,.14,.15],dark2:[.22,.25,.27]},
     midnight:{name:'MIDNIGHT',armor:[.15,.16,.19],armor2:[.25,.27,.31],trim:[.30,.85,1],dark:[.06,.07,.08],dark2:[.11,.12,.14]},
     crimson:{name:'CRIMSON',armor:[.42,.09,.11],armor2:[.56,.15,.16],trim:[.98,.74,.22],dark:[.12,.10,.10],dark2:[.21,.17,.17]},
     royal:{name:'ROYAL',armor:[.23,.13,.40],armor2:[.33,.21,.53],trim:[.98,.74,.22],dark:[.10,.09,.15],dark2:[.17,.15,.25]}
   };
-  var SUNNY_AC_KEYS=['orange','cyan','magenta'];
+  var SUNNY_AC_KEYS=['Orange','Cyan','Magenta'];
   var SUNNY_ACCENTS={
     orange:{name:'ORANGE',core:[1,.46,.10],hot:[1,.78,.38],vent:[1,.54,.12],visor:[.25,.92,1]},
     cyan:{name:'CYAN',core:[.20,.85,1],hot:[.78,.98,1],vent:[.30,.80,1],visor:[.35,.95,1]},
     magenta:{name:'MAGENTA',core:[1,.30,.75],hot:[1,.76,.95],vent:[1,.45,.80],visor:[1,.45,.85]}
   };
-  var sunnyStyle={colorway:'solar',accent:'orange',follow:true};
+  var SUNNY_COLORWAYS_CAPS={};Object.keys(SUNNY_COLORWAYS).forEach(function(k){SUNNY_COLORWAYS_CAPS[k.charAt(0).toUpperCase()+k.slice(1)]=SUNNY_COLORWAYS[k]});
+  Object.keys(SUNNY_COLORWAYS_CAPS).forEach(function(k){SUNNY_COLORWAYS[k]=SUNNY_COLORWAYS_CAPS[k]});
+  var SUNNY_ACCENTS_CAPS={};Object.keys(SUNNY_ACCENTS).forEach(function(k){SUNNY_ACCENTS_CAPS[k.charAt(0).toUpperCase()+k.slice(1)]=SUNNY_ACCENTS[k]});
+  Object.keys(SUNNY_ACCENTS_CAPS).forEach(function(k){SUNNY_ACCENTS[k]=SUNNY_ACCENTS_CAPS[k]});
+  function sunnyCapKey(k){return k?k.charAt(0).toUpperCase()+k.slice(1).toLowerCase():k}
+  var sunnyStyle={colorway:'Solar',accent:'Orange',follow:true};
   try{
     var savedStyle=localStorage.getItem('sunnyStyleV15');
     if(savedStyle){var parsedStyle=JSON.parse(savedStyle);
-      if(parsedStyle&&SUNNY_COLORWAYS[parsedStyle.colorway])sunnyStyle.colorway=parsedStyle.colorway;
-      if(parsedStyle&&SUNNY_ACCENTS[parsedStyle.accent])sunnyStyle.accent=parsedStyle.accent;
+      if(parsedStyle&&SUNNY_COLORWAYS[sunnyCapKey(parsedStyle.colorway)])sunnyStyle.colorway=sunnyCapKey(parsedStyle.colorway);
+      if(parsedStyle&&SUNNY_ACCENTS[sunnyCapKey(parsedStyle.accent)])sunnyStyle.accent=sunnyCapKey(parsedStyle.accent);
       if(parsedStyle&&typeof parsedStyle.follow==='boolean')sunnyStyle.follow=parsedStyle.follow;}
   }catch(styleErr){}
   /* Live theme arrays, refreshed by drawSunny each frame; drawGeo maps
@@ -92,8 +97,9 @@
      every frame, so she recolors on the next frame; here we only persist
      the pick and repaint the console's panel so its highlight follows. */
   function applySunnyStyle(cwKey,acKey){
-    if(cwKey&&SUNNY_COLORWAYS[cwKey])sunnyStyle.colorway=cwKey;
-    if(acKey&&SUNNY_ACCENTS[acKey])sunnyStyle.accent=acKey;
+    if(cwKey){var _cwk=sunnyCapKey(cwKey);if(SUNNY_COLORWAYS[_cwk])sunnyStyle.colorway=_cwk}
+    if(acKey){var _ack=sunnyCapKey(acKey);if(SUNNY_ACCENTS[_ack])sunnyStyle.accent=_ack}
+    if(typeof exiaApplyStyle==='function')exiaApplyStyle();
     try{localStorage.setItem('sunnyStyleV15',JSON.stringify(sunnyStyle))}catch(saveErr){}
     if(custCtx&&custCanvas&&custTexture){
       try{paintCustomizePanel();gl.bindTexture(gl.TEXTURE_2D,custTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,custCanvas)}catch(paintErr){}
@@ -173,34 +179,183 @@
     if(was!==!!on)logEvent('state',on?'follow on':'follow off','obedience');
     return was!==!!on;
   }
-  function checkObedience(text,fromReply){
-    if(!text)return '';
-    var s=normalizeSpeech(text);
-    /* Entrance / exit commands outrank follow toggles: "come back"
-       while she is OUT means walk back in, not just follow-on. */
-    if(speechHas(s,OB_EXIT)){
-      if(sunnyMode!=='out'&&sunnyMode!=='exiting'){startExit();flashObedience('SUNNY IS OUT \u2014 SAY "COME BACK" TO RECALL HER');return 'See you in a bit.'}
-      return "Already out \u2014 say 'come back' when you want me.";
-    }
-    if((speechHas(s,OB_ENTER)||speechHas(s,OB_ON))&&(sunnyMode==='out'||sunnyMode==='exiting')){
-      startEnter();flashObedience('SUNNY IS IN');return "I'm here.";
-    }
-    if(speechHas(s,OB_OFF)){
-      var parkedNow=setFollow(false);
-      flashObedience('PARKED \u2014 SAY "FOLLOW ME" TO RESUME');
-      if(parkedNow)return "Copy that \u2014 I'll stay right here.";
-      return "Already parked \u2014 I'm staying right here.";
-    }
-    /* Her own bridge prose may park or dismiss her, never summon her. */
-    if(fromReply)return '';
-    if(speechHas(s,OB_ON)){
-      var changed=setFollow(true);forceCome=true;sunny.anchorSet=false;
-      flashObedience('FOLLOWING YOU');
-      return changed?'On my way.':'Right here with you.';
+  /* ================== V18 VOICE GRAMMAR v2 ==================
+     phrases.json is the single source (build-inlined below). Precedence
+     per the grammar doc; safety machinery: short-form gate (bare forms
+     only in <=3-token utterances, or as the utterance's final token),
+     reporting guard (past-tense narration fires nothing non-safety
+     unless the phrase opens the utterance), anti-park guard, and the
+     bridge-reply cage {park, exit, transam_off}. Documented deviation:
+     'hangar open'/'hangar closed' are treated as short forms (they are
+     state descriptions — the danger list requires "is the hangar open"
+     to fire nothing). */
+  var PHRASES={"intents": {"follow": {"phrases": ["follow me", "follow", "start following", "follow on", "keep following", "stay with me", "walk with me", "come with me", "with me", "lets go", "lets move", "move with me", "keep up", "on me"], "acks": ["On my way.", "Right behind you.", "With you \u2014 let's move."], "panel": "FOLLOWING YOU", "log": true, "logKind": "state", "shortOnly": ["follow", "with me", "on me"], "acksAlready": ["Right here with you."], "bridgeAction": "follow", "notes": "V17 parity: 'come on' is REMOVED (see conflict rules \u2014 it is the most common filler phrase in dictation). 'come back' is not here; it lives in enter and degrades to come_here when she is already in the room."}, "park": {"phrases": ["stop", "stop walking", "stop following", "dont follow", "stay", "stay here", "stay put", "stay right there", "wait here", "hold position", "park it", "park", "dont come", "land", "come down"], "acks": ["Copy that \u2014 I'll stay right here.", "Parking it. I won't move.", "Holding position."], "panel": "PARKED \u2014 SAY \"FOLLOW ME\" TO RESUME", "log": true, "logKind": "state", "shortOnly": ["stop", "stay", "park"], "acksAlready": ["Already parked \u2014 I'm staying right here."], "legacyAliases": ["stop coming", "stop follow", "do not follow", "quit following", "stay there", "leave me alone", "do not come"], "bridgeAction": "stay", "notes": "V17's full OB_OFF list stays valid as legacy aliases (listed in legacyAliases) \u2014 the 15 above are the canonical v2 set. 'land' / 'come down' are the hover-cancel forms. Anti-park guard: 'dont stop' / 'do not stop' / 'never stop' disable the bare 'stop' match for that utterance (see danger phrases)."}, "exit": {"phrases": ["bye", "goodbye", "bye sunny", "go away", "thats all", "see you", "see you later", "dismissed", "you can go", "head out", "clock out", "thats it for now"], "acks": ["See you in a bit.", "Going, going \u2014 call me back anytime.", "Out. Say 'come back' when you want me."], "panel": "SUNNY IS OUT \u2014 SAY \"COME BACK\" TO RECALL HER", "log": true, "logKind": "state", "shortOnly": ["bye", "goodbye"], "acksAlready": ["Already out \u2014 say 'come back' when you want me."], "bridgeAction": "bye", "notes": "Placement rule (v2 refinement): an exit phrase must START within the first 2 tokens of the utterance or BE the closing phrase of a short utterance (<=5 tokens). Quote guard: if the utterance contains 'said' or 'told', exit is suppressed ('tell him i said bye' is reported speech, not a dismissal)."}, "enter": {"phrases": ["come in", "come back", "come inside", "come on in", "get back in", "get back in here", "back inside", "sunny come back", "come back in", "back in here", "return", "we need you in here"], "acks": ["I'm here.", "Back in \u2014 what are we building?", "Reporting for duty."], "panel": "SUNNY IS IN", "log": true, "logKind": "state", "shortOnly": ["return"], "acksAlready": ["Already in \u2014 right here."], "bridgeAction": "enter", "notes": "Routing rule (V17 parity): while she is OUT/EXITING, any come_here or follow phrase ALSO routes to enter \u2014 'come' alone recalls her. While she is IN the room, this list degrades to come_here."}, "come_here": {"phrases": ["come here", "come to me", "come", "sunny come", "come sunny", "get over here", "over here", "come over here", "come on over", "come right here", "to me", "come up here", "get here"], "acks": ["Coming to you.", "On my way \u2014 right to you.", "Here I come."], "panel": "COMING TO YOU", "log": false, "logKind": null, "shortOnly": ["come", "to me", "over here", "get here"], "acksAlready": ["Already at your side."], "bridgeAction": "come", "notes": "Bare 'come' was THE V16 failure (it matched nothing, then her own reply re-parked her) \u2014 it is a first-class phrase here, short-gated so 'come' buried in a story can't summon her. 'come on' counts ONLY as the whole utterance ('come on' / 'come on sunny', <=3 tokens) \u2014 as mid-sentence filler it is ignored. Transient approach, so no state log of its own; if it flips follow on, setFollow logs that change itself."}, "hover": {"phrases": ["hover", "start hovering", "hover for me", "take off", "lift off", "go hover", "hover mode", "float", "float up", "rise up", "get off the ground", "up you go"], "acks": ["Hovering.", "Off the ground \u2014 GN drive humming.", "Up and holding."], "panel": "HOVERING", "log": true, "logKind": "state", "shortOnly": ["hover", "float", "take off", "lift off"], "acksAlready": ["Already hovering."], "notes": "New in V18 (local-only intent; no bridge tag yet). Ended by any park phrase ('land', 'come down', 'stop'), any locomotion intent, or its own timeout \u2014 she is never left floating by a forgotten command."}, "flip": {"phrases": ["do a flip", "flip", "backflip", "do a backflip", "front flip", "do a front flip", "flip for me", "flip it", "show me a flip", "do a barrel roll", "backflip for me", "full flip"], "acks": ["Watch this.", "Flipping \u2014 try not to blink.", "One flip, coming up."], "panel": "DOING A FLIP", "log": true, "logKind": "state", "shortOnly": ["flip", "backflip"], "notes": "New in V18 (local-only). Reporting guard is the main defense here: 'that flip was cool' must do nothing (see danger phrases)."}, "transam_on": {"phrases": ["trans am", "transam", "go trans am", "go transam", "trans am on", "trans am mode", "activate trans am", "engage trans am", "full trans am", "hit the trans am", "go red", "redline mode"], "acks": ["Trans-Am engaged.", "Going red \u2014 all systems hot.", "Trans-Am. Feel that hum?"], "panel": "TRANS-AM ON", "log": true, "logKind": "state", "shortOnly": ["trans am", "transam", "go red"], "acksAlready": ["Already red, boss. Trans-Am's hot."], "notes": "Whisper WILL write the Pontiac spelling ('trans am') \u2014 the grammar keys on it deliberately, plus the one-word 'transam'. 'go red' belongs to Trans-Am, NOT to colorway_crimson (see conflict matrix) \u2014 red is the spicy word."}, "transam_off": {"phrases": ["trans am off", "end trans am", "kill trans am", "trans am down", "stop trans am", "drop trans am", "trans am end", "turn off trans am", "turn trans am off", "shut trans am down"], "acks": ["Trans-Am off \u2014 cooling down.", "Back to normal colors.", "Standing down the red."], "panel": "TRANS-AM OFF", "log": true, "logKind": "state", "acksAlready": ["Trans-Am's already off."], "gatedPhrases": [{"phrase": "back to normal", "gate": "transam_active"}, {"phrase": "cool down", "gate": "transam_active"}, {"phrase": "kill the glow", "gate": "transam_active"}, {"phrase": "glow off", "gate": "transam_active"}, {"phrase": "power down", "gate": "transam_active"}], "notes": "Two tiers: anchored phrases (contain 'trans am') are always live. Loose phrases ('back to normal', 'cool down', 'power down'\u2026) only fire WHILE Trans-Am is active \u2014 with the glow off they fall through to normal conversation. Ranked above park so 'stop trans am' ends the glow instead of parking her, and above transam_on so an 'off' can never be read as an 'on'."}, "sword_pose": {"phrases": ["sword pose", "draw your sword", "sword out", "gn sword", "show me the sword", "sword up", "blade out", "draw the blade", "sword ready", "sword stance", "pose with the sword", "strike a pose"], "acks": ["GN sword ready.", "Blade out \u2014 looking sharp.", "Sword up. Your call what's next."], "panel": "SWORD POSE", "log": true, "logKind": "state", "acksAlready": ["Sword's already out."], "notes": "New in V18 (local-only). 'pose' alone is deliberately NOT a phrase \u2014 too weak a token."}, "wave": {"phrases": ["wave", "wave at me", "give me a wave", "say hi", "wave hello", "wave hi", "say hello", "give a wave", "wave to me", "hello sunny"], "acks": ["Hey hey.", "Waving \u2014 hi, boss.", "At your service."], "panel": "WAVING", "log": true, "logKind": "state", "shortOnly": ["wave"], "notes": "Bare 'wave' is short-gated: 'wave after wave of orders' is a story, not a command (see danger phrases). A stray wave is the cheapest false positive in the system \u2014 accepted by design."}, "hangar_open": {"phrases": ["open the hangar", "open hangar", "open the hanger", "open my hangar", "show me the suits", "show the suits", "bring up the suits", "suits up", "raise the suits", "reveal the suits", "open the suit bay", "open the bay doors", "hangar open"], "acks": ["Opening your hangar.", "Suits coming up \u2014 watch your step.", "Bay doors open. There they are."], "panel": "HANGAR OPEN \u2014 SUITS UP", "log": true, "logKind": "state", "acksAlready": ["Hangar's already open \u2014 suits are up."], "notes": "'hanger' (the closet spelling) is listed on purpose \u2014 Whisper cannot tell the homophones apart, and the room has no closet to open. All hangar phrases are verb-gated: the word 'hangar' alone, or 'hanging', never fires (see danger phrases)."}, "hangar_close": {"phrases": ["close the hangar", "close hangar", "close the hanger", "shut the hangar", "hide the suits", "suits down", "put the suits away", "lower the suits", "close the suit bay", "close the bay doors", "hangar closed", "seal the hangar"], "acks": ["Closing the hangar.", "Suits away \u2014 floor sealed.", "Hangar shut. All yours."], "panel": "HANGAR CLOSED", "log": true, "logKind": "state", "acksAlready": ["Hangar's already closed."], "notes": "Ranked above hangar_open inside the pair: an utterance containing a close form can never be read as an open."}, "station_ebay": {"phrases": ["open ebay", "show ebay", "check ebay", "ebay station", "open the ebay station", "show the ebay station", "pull up ebay", "bring up ebay", "show my listings", "open my listings", "check my listings", "e bay station"], "acks": ["eBay station up.", "Pulling up your listings.", "Here's the eBay wall."], "panel": "EBAY STATION", "log": false, "logKind": null, "acksAlready": ["eBay station's already up."], "bridgeAction": "ebay", "notes": "Verb-gated (open/show/check/pull up/bring up) or the '<anchor> station' noun form \u2014 a bare mention of eBay in shop talk does nothing. Whisper splits 'eBay' into 'e bay' often enough that the split form is listed. The voice exchange itself is already logged as kind 'voice'; the station open is ephemeral UI, so no extra state log."}, "station_money": {"phrases": ["open money", "money station", "show me the money", "show the money", "check the money", "money up", "open the money station", "pull up money", "pull up the money", "show the sales", "sales station", "the money station"], "acks": ["Money station.", "Money up \u2014 let's see the numbers.", "Here's where the money lives."], "panel": "MONEY STATION", "log": false, "logKind": null, "acksAlready": ["Money station's already up."], "bridgeAction": "money", "notes": "Verb-gated like all stations: 'how much money did we make' is a question for the bridge brain, not a station command (see danger phrases)."}, "station_builds": {"phrases": ["open builds", "builds station", "show the builds", "the builds", "open the builds station", "show builds", "pull up builds", "build board", "show the build board", "current builds", "project station", "show my projects"], "acks": ["Builds station up.", "Your projects, on the wall.", "Build board \u2014 front and center."], "panel": "BUILDS STATION", "log": false, "logKind": null, "acksAlready": ["Builds are already up."], "bridgeAction": "builds", "notes": "'the builds' is the one bare noun form allowed \u2014 in this room it has exactly one referent."}, "colorway_solar": {"phrases": ["go solar", "solar mode", "switch to solar", "colorway solar", "paint it solar", "paint her solar", "make it solar", "back to solar", "solar paint", "solar colors", "stock colors", "factory colors", "repaint solar"], "acks": ["Solar it is \u2014 factory fresh.", "Back to stock Solar.", "Classic colors on."], "panel": "COLORWAY \u2014 SOLAR", "log": true, "logKind": "state", "acksAlready": ["Already wearing Solar."], "notes": "Style intents are verb-gated (go/switch/paint/make/colorway/mode/repaint + name) \u2014 the colorway NAME alone in conversation ('the listing ends at midnight') never repaints her."}, "colorway_midnight": {"phrases": ["go midnight", "midnight mode", "switch to midnight", "colorway midnight", "paint it midnight", "make it midnight", "midnight paint", "midnight colors", "stealth mode", "dark mode", "go dark", "repaint midnight"], "acks": ["Midnight \u2014 stealth mode pretty.", "Dark and quiet. Midnight on.", "Going Midnight."], "panel": "COLORWAY \u2014 MIDNIGHT", "log": true, "logKind": "state", "acksAlready": ["Already in Midnight."], "notes": "'dark mode' / 'go dark' / 'stealth mode' are the dictation-natural forms and are safe here \u2014 none collides with any other intent's anchor."}, "colorway_crimson": {"phrases": ["go crimson", "crimson mode", "switch to crimson", "colorway crimson", "paint it crimson", "paint her red", "make it crimson", "crimson paint", "crimson colors", "repaint crimson", "the red paint"], "acks": ["Crimson \u2014 now we're talking spicy.", "Red everything. Crimson on.", "Crimson engaged."], "panel": "COLORWAY \u2014 CRIMSON", "log": true, "logKind": "state", "acksAlready": ["Already Crimson."], "notes": "'go red' is deliberately NOT here \u2014 it belongs to transam_on (conflict matrix). Crimson is reached by its name or by a paint verb ('paint her red')."}, "colorway_royal": {"phrases": ["go royal", "royal mode", "switch to royal", "colorway royal", "paint it royal", "make it royal", "royal paint", "royal colors", "repaint royal", "dress uniform", "white and gold"], "acks": ["Royal \u2014 white, blue, and gold.", "Dress uniform. Royal on.", "Going Royal."], "panel": "COLORWAY \u2014 ROYAL", "log": true, "logKind": "state", "acksAlready": ["Already Royal."]}, "accent_orange": {"phrases": ["accent orange", "orange accent", "orange glow", "make the glow orange", "orange eyes", "set accent orange", "glow orange", "eyes orange", "orange lights", "accent to orange"], "acks": ["Orange glow, on.", "Accents to orange.", "Warm orange \u2014 my favorite."], "panel": "ACCENT \u2014 ORANGE", "log": true, "logKind": "state", "acksAlready": ["Accent's already orange."], "notes": "Accent intents need the color PLUS an energy anchor (accent / glow / eyes / lights) \u2014 'orange' alone is fruit and traffic cones, not a command."}, "accent_cyan": {"phrases": ["accent cyan", "cyan accent", "cyan glow", "make the glow cyan", "cyan eyes", "set accent cyan", "glow cyan", "eyes cyan", "cyan lights", "accent to cyan"], "acks": ["Cyan glow.", "Accents cyan \u2014 icy.", "Cyan on the eyes and drive."], "panel": "ACCENT \u2014 CYAN", "log": true, "logKind": "state", "acksAlready": ["Accent's already cyan."], "notes": "Mis-hearing design: if Whisper garbles 'cyan' into something unlisted, the command fails SAFE (no repaint) instead of guessing a color. The anchor words (accent/glow/eyes) carry recognition; she can always be re-asked."}, "accent_magenta": {"phrases": ["accent magenta", "magenta accent", "magenta glow", "make the glow magenta", "magenta eyes", "set accent magenta", "glow magenta", "eyes magenta", "magenta lights", "accent to magenta"], "acks": ["Magenta \u2014 bold choice.", "Accents magenta.", "Pink hot. Magenta on."], "panel": "ACCENT \u2014 MAGENTA", "log": true, "logKind": "state", "acksAlready": ["Accent's already magenta."]}, "report_bug": {"phrases": ["report a bug", "tell sunny", "tell the real sunny", "log a bug", "log that bug", "thats a bug", "found a bug", "note it for sunny", "send that to sunny", "tell yourself", "real sunny needs to know", "message the real sunny"], "acks": ["Logged it \u2014 the real me will pick it up and fix it.", "Sent to the real me. Consider it on the list.", "Filed. Real Sunny's got it from here."], "panel": "BUG LOGGED \u2014 THE REAL ME WILL FIX IT", "log": true, "logKind": "bug", "notes": "V17 parity: 'report a bug' and 'tell sunny' are the shipped triggers; the rest are v2 broadenings. The first ack is the V17 line verbatim \u2014 do not reword it. Evaluated on the TRANSCRIPT only, never on bridge reply prose. When no other intent in the utterance produces an ack, the bug ack is spoken; when one does, that ack wins the voice and the panel shows the bug flash (the filing itself always happens)."}}};
+  /* report_bug is a parallel wrapper (grammar meta): the pipeline logs
+     the bug; the matcher returns its ack only when no command fires, so
+     a command inside a bug report still executes. */
+  var GRAMMAR_ORDER=['exit','enter','transam_off','park','transam_on','hangar_close','hangar_open','flip','hover','sword_pose','wave','station_ebay','station_money','station_builds','colorway_solar','colorway_midnight','colorway_crimson','colorway_royal','accent_orange','accent_cyan','accent_magenta','come_here','follow'];
+  var GRAMMAR_SAFE={park:1,transam_off:1,exit:1,hangar_close:1};
+  var GRAMMAR_CAGE={park:1,exit:1,transam_off:1};
+  var REPORT_TOKENS={said:1,says:1,asked:1,told:1,earlier:1,yesterday:1,was:1,were:1,did:1,went:1};
+  var ANTI_PARK=[' dont stop ',' do not stop ',' never stop '];
+  var EXIT_QUOTE={said:1,says:1,told:1,asked:1,ask:1,say:1};
+  var G_INTENTS={};
+  (function(){
+    var ints=PHRASES.intents||{};
+    Object.keys(ints).forEach(function(name){
+      var d=ints[name];
+      var phrases=(d.phrases||[]).map(function(p){return normalizeSpeech(p).trim()}).filter(Boolean);
+      phrases.sort(function(a,b){return b.length-a.length});
+      var short={};
+      (d.shortOnly||[]).forEach(function(p){short[normalizeSpeech(p).trim()]=1});
+      if(name==='hangar_open')short['hangar open']=1;
+      if(name==='hangar_close')short['hangar closed']=1;
+      G_INTENTS[name]={phrases:phrases,short:short,acks:d.acks||[],already:d.acksAlready||[],flash:d.panel||'',log:!!d.log};
+    });
+    /* V17 regression supplements: phrases the V17 matcher shipped and
+       the REG suite pins, which grammar v2's lists folded into shorter
+       forms. They inherit their intent's guards. */
+    var LEGACY={park:['quit following','stop moving','stop follow','do not follow','do not come','stop coming','leave me alone'],
+                follow:['start walking','move it']};
+    Object.keys(LEGACY).forEach(function(name){
+      if(!G_INTENTS[name])return;
+      LEGACY[name].forEach(function(p){
+        if(G_INTENTS[name].phrases.indexOf(p)<0)G_INTENTS[name].phrases.push(p);
+      });
+      G_INTENTS[name].phrases.sort(function(a,b){return b.length-a.length});
+    });
+  })();
+  function gramFind(s,phrase){
+    var needle=' '+phrase+' ';
+    var i=s.indexOf(needle);
+    if(i<0)return null;
+    var before=s.slice(0,i+1).trim();
+    return{tok:before?before.split(' ').length:0,end:i+needle.length-1};
+  }
+  function gramFire(name,s,toks,fromReply){
+    var d=G_INTENTS[name];if(!d)return '';
+    var ack=function(list,fb){return list&&list.length?list[0]:fb||''};
+    var flash=function(t){if(t)flashObedience(t)};
+    if(d.log)logEvent('state','voice: '+name,'obedience');
+    switch(name){
+      case 'report_bug':return ack(d.acks,'Logged it.');
+      case 'exit':
+        exiaLandHover();TR.swordHold=false;
+        if(sunnyMode!=='out'&&sunnyMode!=='exiting'){startExit();flash('SUNNY IS OUT — SAY "COME BACK" TO RECALL HER');return ack(d.acks,'See you in a bit.')}
+        return ack(d.already,"Already out — say 'come back' when you want me.");
+      case 'enter':
+        if(sunnyMode==='out'||sunnyMode==='exiting'){startEnter();flash(d.flash||'SUNNY IS IN');return ack(d.acks,"I'm here.")}
+        return gramFireIn('come_here',d);
+      case 'transam_off':
+        if(transAm){setTransAm(false,'voice');flash(d.flash);return ack(d.acks,'Trans-Am off.')}
+        return ack(d.already,'Trans-Am is already off.');
+      case 'park':{
+        exiaLandHover();TR.swordHold=false;
+        var changed=setFollow(false);
+        flash(d.flash||'PARKED — SAY "FOLLOW ME" TO RESUME');
+        return changed?ack(d.acks,"Copy that — I'll stay right here."):ack(d.already,"Already parked — I'm staying right here.");
+      }
+      case 'transam_on':
+        if(transAm)return ack(d.already,'Already red.');
+        setTransAm(true,'voice');flash(d.flash);return ack(d.acks,'Trans-Am!');
+      case 'hangar_open':
+        if(hangarState==='open'||hangarState==='opening')return ack(d.already,'Already open.');
+        setHangar(true,'voice');flash(d.flash);return ack(d.acks,'Opening the hangar.');
+      case 'hangar_close':
+        if(hangarState==='closed'||hangarState==='closing')return ack(d.already,'Already closed.');
+        setHangar(false,'voice');flash(d.flash);return ack(d.acks,'Closing the hangar.');
+      case 'flip':
+        exiaStartTrick('flip');flash(d.flash);return ack(d.acks,'Flipping!');
+      case 'hover':
+        if(TR.hoverHold||hoverAmt>0.5){exiaToggleHover();flash('COMING DOWN');return ack(d.already,'Coming down.')}
+        exiaToggleHover();flash(d.flash);return ack(d.acks,'Hovering.');
+      case 'sword_pose':
+        exiaStartTrick('sword');flash(d.flash);return ack(d.acks,'GN sword — guard up.');
+      case 'wave':
+        exiaStartTrick('wave');waveUntil=performance.now()+1400;flash(d.flash);return ack(d.acks,'Hi hi!');
+      case 'station_ebay':
+        ebayOpen=true;openStation=-1;flash('EBAY BOARD');return ack(d.acks,'eBay board up.');
+      case 'station_money':
+        openStation=0;ebayOpen=false;flash('MONEY BOARD');return ack(d.acks,'Money board.');
+      case 'station_builds':
+        openStation=1;ebayOpen=false;flash('BUILDS BOARD');return ack(d.acks,'Builds board.');
+      case 'colorway_solar':case 'colorway_midnight':case 'colorway_crimson':case 'colorway_royal':{
+        var cw={colorway_solar:'Solar',colorway_midnight:'Midnight',colorway_crimson:'Crimson',colorway_royal:'Royal'}[name];
+        applySunnyStyle(cw,null);flash(cw.toUpperCase()+' COLORS');return ack(d.acks,cw+' colors on.');
+      }
+      case 'accent_orange':case 'accent_cyan':case 'accent_magenta':{
+        var ac={accent_orange:'Orange',accent_cyan:'Cyan',accent_magenta:'Magenta'}[name];
+        applySunnyStyle(null,ac);flash(ac.toUpperCase()+' ACCENT');return ack(d.acks,ac+' accent on.');
+      }
+      case 'come_here':return gramFireIn('come_here',d);
+      case 'follow':return gramFireIn('follow',d);
     }
     return '';
   }
-
+  function gramFireIn(kind,d){
+    var ack=function(list,fb){return list&&list.length?list[0]:fb||''};
+    if(sunnyMode==='out'||sunnyMode==='exiting'){
+      startEnter();flashObedience('SUNNY IS IN');
+      return ack(d.acks,'On my way.');
+    }
+    exiaLandHover();TR.swordHold=false;
+    var changed=setFollow(true);
+    if(kind==='come_here'){forceCome=true;sunny.anchorSet=false}
+    flashObedience('FOLLOWING YOU');
+    return changed?ack(d.acks,'On my way.'):ack(d.already,'Right here with you.');
+  }
+  function checkObedience(text,fromReply){
+    if(!text)return '';
+    var s=normalizeSpeech(text);
+    if(!s||s===' ')return '';
+    var body=s.trim(),toks=body?body.split(' '):[];
+    var reportHit=false;
+    for(var ti=0;ti<toks.length;ti++)if(REPORT_TOKENS[toks[ti]]){reportHit=true;break}
+    var antiPark=false;
+    for(var ai=0;ai<ANTI_PARK.length;ai++)if(s.indexOf(ANTI_PARK[ai])>=0){antiPark=true;break}
+    for(var oi=0;oi<GRAMMAR_ORDER.length;oi++){
+      var name=GRAMMAR_ORDER[oi],d=G_INTENTS[name];
+      if(!d)continue;
+      if(fromReply&&!GRAMMAR_CAGE[name])continue;
+      if(name==='park'&&antiPark)continue;
+      for(var pi=0;pi<d.phrases.length;pi++){
+        var phrase=d.phrases[pi];
+        var hit=gramFind(s,phrase);
+        if(!hit)continue;
+        var phraseToks=phrase.split(' ').length;
+        var anchored=hit.tok===0||(hit.tok===1&&(toks[0]==='sunny'||toks[0]==='ok'||toks[0]==='hey'));
+        if(d.short[phrase]&&!fromReply){
+          /* the short-form gate guards USER utterances; bridge replies
+             are already caged to {park, exit, transam_off} and V17
+             semantics let OFF prose park her (REG-07) */
+          var endsAtLast=hit.end>=s.length-1;
+          if(!(toks.length<=3||(phraseToks===1&&endsAtLast)))continue;
+        }
+        if(name==='exit'){
+          var quoted=false;
+          for(var qi=0;qi<toks.length;qi++)if(EXIT_QUOTE[toks[qi]]){quoted=true;break}
+          if(quoted)break;
+          if(!(hit.tok<=1||toks.length<=5))continue;
+        }
+        if(reportHit&&!anchored&&!GRAMMAR_SAFE[name]&&!fromReply)continue;
+        return gramFire(name,s,toks,fromReply);
+      }
+    }
+    if(!fromReply&&G_INTENTS.report_bug){
+      var rb=G_INTENTS.report_bug;
+      for(var ri=0;ri<rb.phrases.length;ri++)if(gramFind(s,rb.phrases[ri]))return gramFire('report_bug',s,toks,fromReply);
+    }
+    return '';
+  }
+  /* ---------- Trans-Am state (never persisted) ---------- */
+  var transAm=false;
+  function setTransAm(on,src){
+    if(!!on===transAm)return;
+    transAm=!!on;
+    audioTransAmSet(transAm);
+    if(transAm)flashObedience('TRANS-AM — SAY "TRANS AM OFF" TO STAND DOWN');
+    logEvent('state','trans-am '+(transAm?'on':'off')+(src?' ('+src+')':''),'obedience');
+  }
   /* ================== V17 SUNNY LINK (groundwork) ==================
      Nestor's rule: what he tells the ROOM Sunny must reach the REAL
      Sunny (main chat) without him repeating himself here. logEvent()
@@ -212,7 +367,7 @@
      answers 404/501, every call below fails in a .catch, and the room
      never notices. Payloads are truncated to ~500 chars per field. */
   var REPORT_URL='https://sunny-bridge.steveclavel1.workers.dev/report';
-  var ROOM_VERSION='V17';
+  var ROOM_VERSION='V18';
   function logEvent(kind,text,detail){
     try{
       if(kind==='error'){logEvent._ec=(logEvent._ec||0)+1;if(logEvent._ec>10)return}
@@ -444,7 +599,7 @@
   var normalLoc=null,uvLoc=null,worldLoc=null,lightLoc=null,texLoc=null,useTexLoc=null,glowLoc=null,alphaLoc=null,specLoc=null,camLoc=null,shadowOnLoc=null,shadowTexLoc=null;
   var depthProgram=null,depthPosLoc=null,depthMvpLoc=null,SHADOW_PASS=false,shadowFB=null,shadowTex=null,shadowReady=false,lightPV=null,lightRawPV=null;
   var whiteTex=null,MATS={},camPos=[0,1.6,0];
-  var boardBrightLoc=null,quadBright=1;
+  var boardBrightLoc=null,quadBright=1;var v18Loc=null,V18_VIEWPORT=[1280,720];
   var screenCanvas=null,screenCtx=null,boardCanvasObj=null,boardCtx=null,stationCanvases=[],lastScreenMs=0;
   var hoverTarget='',pointerRays=[],monitorTargets=[],currentMonitorStation=0,SUNNY_ARMOR=false;
   var dustProgram=null,dustVB=null,dustPosLoc=null,dustMvpLoc=null,dustTimeLoc=null,geoSky=null,envT=0;
@@ -457,14 +612,16 @@
   function initScene(){
     if(sceneReady)return;
     sceneReady=true;
+    v18Boot();
     /* Lit shader (V13, unchanged in V14): hemisphere ambient + one directional key light with a
        1024 shadow map (depth packed into an RGBA target — no extension
        needed on Quest 2), a Blinn specular term for material feel, optional
        procedural texture, glow (unlit emissive) and alpha per material. */
     var vs=compile(gl.VERTEX_SHADER,'attribute vec3 p;attribute vec3 n;attribute vec2 u;uniform mat4 m;uniform mat4 w;uniform mat4 lm;varying vec3 vN;varying vec3 vW;varying vec2 vUv;varying vec4 vL;void main(){vec4 wp=w*vec4(p,1.0);vW=wp.xyz;vN=mat3(w)*n;vUv=u;vL=lm*wp;gl_Position=m*vec4(p,1.0);}');
-    var fs=compile(gl.FRAGMENT_SHADER,'precision mediump float;uniform vec3 c;uniform sampler2D t;uniform sampler2D sm;uniform float useTex;uniform float glow;uniform float alpha;uniform float spec;uniform vec3 cam;uniform float shadowOn;varying vec3 vN;varying vec3 vW;varying vec2 vUv;varying vec4 vL;void main(){vec3 base=mix(c,texture2D(t,vUv).rgb*c,useTex);vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;vec3 amb=mix(vec3(.17,.14,.11),vec3(.6,.76,.84),N.y*.5+.5)*.66;vec3 L=normalize(vec3(.42,.85,.32));float dif=max(dot(N,L),0.0);float sh=1.0;if(shadowOn>.5){vec3 lc=vL.xyz/vL.w;if(lc.x>0.0&&lc.x<1.0&&lc.y>0.0&&lc.y<1.0&&lc.z<1.0){float bias=.003;float acc=0.0;for(int i=-1;i<=1;i++){for(int j=-1;j<=1;j++){float d=texture2D(sm,lc.xy+vec2(float(i),float(j))/1024.0).r;acc+=(lc.z-bias>d)?0.0:1.0;}}sh=.35+.65*(acc/9.0);}}vec3 V=normalize(cam-vW);vec3 H=normalize(L+V);float sp=pow(max(dot(N,H),0.0),42.0)*spec*sh;vec3 col=base*(amb+vec3(1.0,.93,.8)*dif*.9*sh)+vec3(sp);col=mix(col,base*1.3+vec3(sp*.4),glow);gl_FragColor=vec4(col,alpha);}');
+    var fs=compile(gl.FRAGMENT_SHADER,'precision mediump float;uniform vec3 c;uniform sampler2D t;uniform sampler2D sm;uniform float useTex;uniform float glow;uniform float alpha;uniform float spec;uniform vec3 cam;uniform float shadowOn;uniform vec3 uKeyDir;uniform vec3 uKeyColor;uniform float uKeyInt;uniform vec3 uHemiSky;uniform vec3 uHemiGnd;uniform float uHemiInt;uniform float uAmbient;uniform float uWarmth;uniform float uSat;uniform float uVig;uniform float uFog;uniform vec3 uFogColor;uniform float uHero;uniform float uRim;uniform vec2 uViewport;varying vec3 vN;varying vec3 vW;varying vec2 vUv;varying vec4 vL;void main(){vec3 base=mix(c,texture2D(t,vUv).rgb*c,useTex);vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;vec3 hemi=mix(uHemiGnd,uHemiSky,N.y*.5+.5)*uHemiInt;vec3 L=normalize(uKeyDir);float dif=max(dot(N,L),0.0);float sh=1.0;if(shadowOn>.5){vec3 lc=vL.xyz/vL.w;if(lc.x>0.0&&lc.x<1.0&&lc.y>0.0&&lc.y<1.0&&lc.z<1.0){float bias=.003;float acc=0.0;for(int i=-1;i<=1;i++){for(int j=-1;j<=1;j++){float d=texture2D(sm,lc.xy+vec2(float(i),float(j))/1024.0).r;acc+=(lc.z-bias>d)?0.0:1.0;}}sh=.30+.70*(acc/9.0);}}vec3 V=normalize(cam-vW);vec3 H=normalize(L+V);float sp=pow(max(dot(N,H),0.0),42.0)*spec*sh;vec3 col=base*(hemi+uAmbient+uKeyColor*dif*uKeyInt*sh)+vec3(sp);vec3 heroL=normalize(vec3(-0.45,0.75,0.85));float hd=max(dot(N,heroL),0.0)*uHero;col+=base*hd*vec3(1.0,0.96,0.90);float fres=pow(1.0-max(dot(N,V),0.0),3.0)*uRim;col+=fres*vec3(0.65,0.78,1.0)*(0.25+base);col=mix(col,base*(1.30+uHero*0.30)+vec3(sp*.4),clamp(glow,0.0,1.0));if(glow>1.0)col+=base*(glow-1.0)*0.85;float lum=dot(col,vec3(0.299,0.587,0.114));col=mix(vec3(lum),col,uSat);col*=mix(vec3(1.0),vec3(1.045,0.99,0.945),uWarmth);float dist=length(cam-vW);float ff=1.0-exp(-pow(dist*uFog,2.0));col=mix(col,uFogColor,clamp(ff,0.0,1.0));vec2 fc=gl_FragCoord.xy/max(uViewport,vec2(1.0));float vd=distance(fc,vec2(0.5,0.46));col*=1.0-uVig*smoothstep(0.55,1.10,vd)*0.38;gl_FragColor=vec4(col,alpha);}');;
     program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));
     positionLoc=gl.getAttribLocation(program,'p');normalLoc=gl.getAttribLocation(program,'n');uvLoc=gl.getAttribLocation(program,'u');mvpLoc=gl.getUniformLocation(program,'m');worldLoc=gl.getUniformLocation(program,'w');lightLoc=gl.getUniformLocation(program,'lm');colorLoc=gl.getUniformLocation(program,'c');texLoc=gl.getUniformLocation(program,'t');shadowTexLoc=gl.getUniformLocation(program,'sm');useTexLoc=gl.getUniformLocation(program,'useTex');glowLoc=gl.getUniformLocation(program,'glow');alphaLoc=gl.getUniformLocation(program,'alpha');specLoc=gl.getUniformLocation(program,'spec');camLoc=gl.getUniformLocation(program,'cam');shadowOnLoc=gl.getUniformLocation(program,'shadowOn');
+    v18Loc={keyDir:gl.getUniformLocation(program,'uKeyDir'),keyColor:gl.getUniformLocation(program,'uKeyColor'),keyInt:gl.getUniformLocation(program,'uKeyInt'),hemiSky:gl.getUniformLocation(program,'uHemiSky'),hemiGnd:gl.getUniformLocation(program,'uHemiGnd'),hemiInt:gl.getUniformLocation(program,'uHemiInt'),ambient:gl.getUniformLocation(program,'uAmbient'),warmth:gl.getUniformLocation(program,'uWarmth'),sat:gl.getUniformLocation(program,'uSat'),vig:gl.getUniformLocation(program,'uVig'),fog:gl.getUniformLocation(program,'uFog'),fogColor:gl.getUniformLocation(program,'uFogColor'),hero:gl.getUniformLocation(program,'uHero'),rim:gl.getUniformLocation(program,'uRim'),viewport:gl.getUniformLocation(program,'uViewport')};
     var dvs=compile(gl.VERTEX_SHADER,'attribute vec3 p;uniform mat4 m;void main(){gl_Position=m*vec4(p,1.0);}');
     var dfs=compile(gl.FRAGMENT_SHADER,'precision mediump float;void main(){gl_FragColor=vec4(gl_FragCoord.z,0.0,0.0,1.0);}');
     depthProgram=gl.createProgram();gl.attachShader(depthProgram,dvs);gl.attachShader(depthProgram,dfs);gl.linkProgram(depthProgram);depthPosLoc=gl.getAttribLocation(depthProgram,'p');depthMvpLoc=gl.getUniformLocation(depthProgram,'m');
@@ -565,9 +722,10 @@
   function makeCanvas(w,h){var c=document.createElement('canvas');c.width=w;c.height=h;return c}
   function uploadCanvasTex(c,repeat){
     var t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
-    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    var _pot=(c.width&(c.width-1))===0&&(c.height&(c.height-1))===0;
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,_pot?gl.LINEAR_MIPMAP_LINEAR:gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,repeat?gl.REPEAT:gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,repeat?gl.REPEAT:gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);return t;
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);if(_pot){try{gl.generateMipmap(gl.TEXTURE_2D)}catch(mipErr){}}return t;
   }
   function seeded(seed){var s=seed*1013+77;return function(){return(s=(s*16807)%2147483647)/2147483647}}
   /* Detail pack (c): armor panel texture — canvas return instead of THREE. */
@@ -971,7 +1129,7 @@
     }
     if(SHADOW_PASS){
       if(mat&&mat.noCast)return;
-      gl.useProgram(depthProgram);gl.bindBuffer(gl.ARRAY_BUFFER,geo.vb);gl.enableVertexAttribArray(depthPosLoc);gl.vertexAttribPointer(depthPosLoc,3,gl.FLOAT,false,32,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,geo.ib);gl.uniformMatrix4fv(depthMvpLoc,false,mul(pv,world));gl.drawElements(gl.TRIANGLES,geo.count,gl.UNSIGNED_SHORT,0);return;
+      gl.useProgram(depthProgram);gl.bindBuffer(gl.ARRAY_BUFFER,geo.vb);gl.enableVertexAttribArray(depthPosLoc);gl.vertexAttribPointer(depthPosLoc,3,gl.FLOAT,false,32,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,geo.ib);gl.uniformMatrix4fv(depthMvpLoc,false,mul(pv,world));gl.drawElements(gl.TRIANGLES,geo.count,geo.it||gl.UNSIGNED_SHORT,0);return;
     }
     gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,geo.vb);
     gl.enableVertexAttribArray(positionLoc);gl.vertexAttribPointer(positionLoc,3,gl.FLOAT,false,32,0);
@@ -986,8 +1144,9 @@
     gl.uniform1f(useTexLoc,m.tex?1:0);gl.uniform1f(glowLoc,m.glow||0);gl.uniform1f(specLoc,m.spec!=null?m.spec:.25);gl.uniform1f(shadowOnLoc,shadowReady?1:0);
     var al=m.alpha!=null?m.alpha:1;
     gl.uniform1f(alphaLoc,al);
+    if(v18Loc){gl.uniform3fv(v18Loc.keyDir,uLight.dir);gl.uniform3fv(v18Loc.keyColor,uLight.keyColor);gl.uniform1f(v18Loc.keyInt,uLight.keyInt);gl.uniform3fv(v18Loc.hemiSky,uLight.hemiSky);gl.uniform3fv(v18Loc.hemiGnd,uLight.hemiGnd);gl.uniform1f(v18Loc.hemiInt,uLight.hemiInt);gl.uniform1f(v18Loc.ambient,uLight.ambient);gl.uniform1f(v18Loc.warmth,uLight.warmth);gl.uniform1f(v18Loc.sat,uLight.sat);gl.uniform1f(v18Loc.vig,uLight.vig);gl.uniform1f(v18Loc.fog,uLight.fog);gl.uniform3fv(v18Loc.fogColor,uLight.fogColor);gl.uniform1f(v18Loc.hero,m.hero||0);gl.uniform1f(v18Loc.rim,m.rim||0);gl.uniform2f(v18Loc.viewport,V18_VIEWPORT[0],V18_VIEWPORT[1])}
     if(al<1){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,m.add?gl.ONE:gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false)}
-    gl.drawElements(gl.TRIANGLES,geo.count,gl.UNSIGNED_SHORT,0);
+    gl.drawElements(gl.TRIANGLES,geo.count,geo.it||gl.UNSIGNED_SHORT,0);
     if(al<1){gl.depthMask(true);gl.disable(gl.BLEND)}
     gl.disableVertexAttribArray(normalLoc);gl.disableVertexAttribArray(uvLoc);
   }
@@ -1326,10 +1485,10 @@
     drawPart(pv,matT(0,0,0),7.5,.26,2.3,.8,.52,.7,[.85,.72,.5]);
     /* Loose motor housing + gears on the right floor; cable coils in both
        foreground corners (spec §§3.3, 5). */
-    drawCanister(pv,5.7,.3,4.9,.7);
-    drawGeoPart(pv,geoCyl,matT(6.45,0,4.35),0,.05,0,.36,.09,.36,[.62,.46,.17],MATS.gold);
-    drawGeoPart(pv,geoCyl,matT(6.0,0,5.35),0,.04,0,.19,.07,.19,[.5,.38,.14],MATS.gold);
-    drawCoil(pv,-6.1,5.3);drawCoil(pv,4.4,5.7);
+    drawCanister(pv,5.7,.3,-4.9,.7);
+    drawGeoPart(pv,geoCyl,matT(9.35,0,-2.6),0,.05,0,.36,.09,.36,[.62,.46,.17],MATS.gold);
+    drawGeoPart(pv,geoCyl,matT(8.95,0,-1.95),0,.04,0,.19,.07,.19,[.5,.38,.14],MATS.gold);
+    drawCoil(pv,-6.1,5.3);drawCoil(pv,9.9,-3.9);
     /* Repair bench: brushed top, hazard-stripe front edge, vise + pegboard
        with tool silhouettes, two Chromebooks, parts trays. */
     var bench=matT(0,0,0);
@@ -1696,7 +1855,9 @@
      from the equipped theme (SUNNY_COLORWAYS x SUNNY_ACCENTS) so the
      CUSTOMIZE SUNNY console can redress her live; THEME_* feeds
      drawGeo's material mapping. Solar + orange is the default look. */
-  function drawSunny(pv,t){
+
+  function drawSunny(pv,t){_pvCur=pv;if(exiaReady){drawExia(pv)}else{drawSunnyLegacy(pv,t)}}
+  function drawSunnyLegacy(pv,t){
     SUNNY_ARMOR=true;
     var cw=SUNNY_COLORWAYS[sunnyStyle.colorway]||SUNNY_COLORWAYS.solar;
     var ac=SUNNY_ACCENTS[sunnyStyle.accent]||SUNNY_ACCENTS.orange;
@@ -2061,6 +2222,7 @@
   function updateSunny(frame,dt){
     var pose=frame.getViewerPose(refSpace);
     if(!pose||dt<=0)return;
+    updateHangar(dt);updateExia(dt);lightUpdate(dt);audioStepsUpdate();
     var up=pose.transform.position;
     var gx,gz,stopR,travelling;
     if(sunnyMode==='out'){return}
@@ -2248,8 +2410,17 @@
           playerOffset.x+=mx;playerOffset.z+=mz;
           /* Radial clamp for the round hangar: glide anywhere inside the
              shell, stop ~2.5 m short of the curved wall. */
+          /* V18 clamp: the V17 8.4 m room disc, UNION the bay disc
+             (r4.5 @ pit centre 5.9,5.9) while the hangar is open, so
+             Nestor can walk in among the suits. Decided BEFORE clamping
+             (a post-clamp union can never grow past 8.4). */
           var plen=Math.sqrt(playerOffset.x*playerOffset.x+playerOffset.z*playerOffset.z);
-          if(plen>8.4){playerOffset.x*=8.4/plen;playerOffset.z*=8.4/plen}
+          var bdx=playerOffset.x-5.9,bdz=playerOffset.z-5.9,bd=Math.sqrt(bdx*bdx+bdz*bdz);
+          var inRoom=plen<=8.4,inBay=(hangarState==='open')&&bd<=4.5;
+          if(!inRoom&&!inBay){
+            if(hangarState==='open'&&(bd-4.5)<(plen-8.4)){playerOffset.x=5.9+bdx*4.5/bd;playerOffset.z=5.9+bdz*4.5/bd}
+            else if(plen>8.4){playerOffset.x*=8.4/plen;playerOffset.z*=8.4/plen}
+          }
         }
       }else if(src.handedness==='right'){
         /* Smooth turn: rotation speed scales with stick deflection past a
@@ -2335,6 +2506,7 @@
     for(var cwI=0;cwI<4;cwI++){var cpw=custPadWorld('cw',cwI);list.push({id:'cw'+cwI,box:[cpw.x,cpw.y,cpw.z,.3,.24,.3]})}
     for(var acI=0;acI<3;acI++){var apw=custPadWorld('ac',acI);list.push({id:'ac'+acI,box:[apw.x,apw.y,apw.z,.3,.24,.3]})}
     var op=micOrbPos();list.push({id:'orb',box:[op.x,op.y,op.z,2.1,2.1,2.1]});
+    list.push({id:'hangar',box:[hangarBtn.x,1.05,hangarBtn.z,1.9,1.4,1.9]});
     return list;
   }
   /* Per-frame laser state for both controllers: origin, direction, nearest
@@ -2379,6 +2551,12 @@
       d=[d[0]/dl,d[1]/dl,d[2]/dl];
       if(rayHitsBox(o,d,[BOARD_POS.x,BOARD_POS.y,BOARD_POS.z,3.9,2.5,.9])){boardVisible=!boardVisible;return}
       if(rayHitsBox(o,d,[EBAY_POS.x,2.3,EBAY_POS.z,5.6,2.6,1.4])){ebayOpen=!ebayOpen;if(ebayOpen)openStation=-1;return}
+      if(rayHitsBox(o,d,[hangarBtn.x,1.05,hangarBtn.z,1.9,1.4,1.9])){
+        var willOpen=(hangarState==='closed'||hangarState==='closing');
+        setHangar(willOpen,'button');audioUnlock();audioPlay('uiConfirm',0.7);
+        flashObedience(willOpen?'HANGAR OPENING — SUITS RISING':'HANGAR CLOSING');
+        say(willOpen?'Opening your hangar.':'Closing the hangar.');speakFallback(willOpen?'Opening your hangar.':'Closing the hangar.');
+        return}
       /* CUSTOMIZE SUNNY swatch pads: a tap applies that colorway/accent
          live and saves it; tapping the console body just gets a wave. */
       for(var cwi=0;cwi<4;cwi++){var cp=custPadWorld('cw',cwi);
@@ -2420,17 +2598,25 @@
   /* Static-caster shadow pass: props, Sunny and stations render once into
      the 1024 depth target from the sun-core light, before the eye passes. */
   function renderShadowMap(t){
+    /* V18: hangar + GLB props join the casters via drawSunny wrapper
+       routing already in place; the bay draws inside the shadow pass
+       through the SUNNY hook below (kept cheap: platform + statues).
+       HARDENED: the caster draws run under try/finally — a throw in any
+       caster must never leave SHADOW_PASS set (it would route every
+       later drawGeo into the depth program and blank the frame). */
     if(!shadowReady||!shadowFB)return;
     gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFB);
     gl.viewport(0,0,1024,1024);
     gl.clearColor(1,1,1,1);
     gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     SHADOW_PASS=true;
+    try{
     drawProps(lightRawPV);
     if(sunnyMode!=='out')drawSunny(lightRawPV,t);
     drawStations(lightRawPV,t);
     drawCustomizeConsole(lightRawPV);
     drawDoorway(lightRawPV);
+    }catch(shErr){try{logEvent('error','shadow pass: '+shErr.message,'v18')}catch(e2){}}
     SHADOW_PASS=false;
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
@@ -2478,10 +2664,11 @@
     if(full)computeHover(frame);
     for(var v=0;v<pose.views.length;v++){
       var view=pose.views[v],vp=layer.getViewport(view);
-      gl.viewport(vp.x,vp.y,vp.width,vp.height);
+      gl.viewport(vp.x,vp.y,vp.width,vp.height);V18_VIEWPORT=[vp.width,vp.height];
       var pv=mul(view.projectionMatrix,view.transform.inverse.matrix);
       drawEnvironment(pv,full);
       if(full)drawProps(pv);
+      if(full){drawPropsGLB(pv);drawPropFixtures(pv);drawHangar(pv)}
       if(sunnyMode!=='out')drawSunny(pv,t);
       drawMicOrb(pv,t);
       if(full)drawStations(pv,t);
@@ -2502,6 +2689,8 @@
       if(full)drawHoloPanels(pv);
       if(full)drawDrones(pv,t);
       if(full)drawAtmosphere(pv,t);
+      if(full)drawAtmosphereFX(pv);
+      if(full)drawSheen(pv);
       if(full)drawDust(pv,t);
       if(sceneReady)drawInputs(frame,pv);
     }
@@ -2553,6 +2742,7 @@
       session.addEventListener('squeezestart',onSqueezeStart);
       session.addEventListener('squeezeend',onSqueezeEnd);
       sceneReady=false;
+      audioUnlock();
       startTime=performance.now();
       label.textContent='Exit VR';status.textContent='VR RUNNING';enter.disabled=false;
       session.requestAnimationFrame(onXRFrame);
@@ -2575,6 +2765,1557 @@
   document.getElementById('close').addEventListener('click',function(){clearTimeout(hideTimer);dialog.classList.remove('show')});
   wallBtn.addEventListener('click',function(){var open=board.classList.toggle('focus');wallBtn.setAttribute('aria-expanded',String(open));wallLabel.textContent=open?'Close wall':'View wall'});
   enter.addEventListener('click',enterVR);
+  var MeshoptDecoder=(function(){var module={exports:{}};var exports=module.exports;
+  // This file is part of meshoptimizer library and is distributed under the terms of MIT License.
+  // Copyright (C) 2016-2026, by Arseny Kapoulkine (arseny.kapoulkine@gmail.com)
+  var MeshoptDecoder = (function () {
+  	// Built with clang version 22.1.0-wasi-sdk
+  	// Built from meshoptimizer 1.2
+  	var wasm_base =
+  		'b9H79Tebbbe8Fv9Gbb9Gvuuuuueu9Giuuub9Geueu9Giuuueuixkbeeeddddillviebeoweuecj:Gdkr;Neqo9TW9T9VV95dbH9F9F939H79T9F9J9H229F9Jt9VV7bb8A9TW79O9V9Wt9F9KW9J9V9KW9wWVtW949c919M9MWVbeY9TW79O9V9Wt9F9KW9J9V9KW69U9KW949c919M9MWVbdE9TW79O9V9Wt9F9KW9J9V9KW69U9KW949tWG91W9U9JWbiL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9p9JtblK9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9r919HtbvL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVT949WboY9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVJ9V29VVbrl79IV9Rbwq1Zkdbk:kYi5ud9:du8Jjjjjbcjq9Rgv8Kjjjjbc9:hodnalTmbcuhoaiRbbgrc;WeGc:Ge9hmbarcsGgwce0mbc9:hoalcufadcd4cbawEgDadfgrcKcaawEgqaraq0Egk6mbaicefhxcj;abad9Uc;WFbGcjdadca0EhmaialfgPar9Rgoadfhsavaoadz:jjjjbgzceVhHcbhOdndninaeaO9nmeaPax9RaD6mdamaeaO9RaOamfgoae6EgAcsfglc9WGhCaAcethXaxaDfhiaOaeaoaeao6E9RhQalcl4cifcd4hLazcjdfaAfhKcbhYabaOad2fg8AhEaHh3incbh5dnawTmbaxaYcd4fRbbh5kcbh8Eazcjdfhqinaih8Fdndndndna5a8Ecet4ciGgoc9:fPdebdkaPa8F9RaA6mrazcjdfa8EaA2fa8FaAz:jjjjb8Aa8FaAfhixdkazcjdfa8EaA2fcbaAz:kjjjb8Aa8FhixekaPa8F9RaL6mva8FaLfhidnaCTmbaPai9RcK6mbaocdtc:q:G:cjbfcj:G:cjbawEhaczhrcbhlinargoc9Wfghaqfhrdndndndndndnaaa8Fahco4fRbbalcoG4ciGcdtfydbPDbedvivvvlvkar9cb83bwar9cb83bbxlkarcbaiRbdai8Xbb9c:c:qj:bw9:9c:q;c1:I1e:d9c:b:c:e1z9:gg9cjjjjjz:dg8J9qE86bbaqaofgrcGfcbaicdfa8J9c8N1:NfghRbbag9cjjjjjw:dg8J9qE86bbarcVfcbaha8J9c8M1:NfghRbbag9cjjjjjl:dg8J9qE86bbarc7fcbaha8J9c8L1:NfghRbbag9cjjjjjd:dg8J9qE86bbarctfcbaha8J9c8K1:NfghRbbag9cjjjjje:dg8J9qE86bbarc91fcbaha8J9c8J1:NfghRbbag9cjjjj;ab:dg8J9qE86bbarc4fcbaha8J9cg1:NfghRbbag9cjjjja:dg8J9qE86bbarc93fcbaha8J9ch1:NfghRbbag9cjjjjz:dgg9qE86bbarc94fcbahag9ca1:NfghRbbai8Xbe9c:c:qj:bw9:9c:q;c1:I1e:d9c:b:c:e1z9:gg9cjjjjjz:dg8J9qE86bbarc95fcbaha8J9c8N1:NfgiRbbag9cjjjjjw:dg8J9qE86bbarc96fcbaia8J9c8M1:NfgiRbbag9cjjjjjl:dg8J9qE86bbarc97fcbaia8J9c8L1:NfgiRbbag9cjjjjjd:dg8J9qE86bbarc98fcbaia8J9c8K1:NfgiRbbag9cjjjjje:dg8J9qE86bbarc99fcbaia8J9c8J1:NfgiRbbag9cjjjj;ab:dg8J9qE86bbarc9:fcbaia8J9cg1:NfgiRbbag9cjjjja:dg8J9qE86bbarcufcbaia8J9ch1:NfgiRbbag9cjjjjz:dgg9qE86bbaiag9ca1:NfhixikaraiRblaiRbbghco4g8Ka8KciSg8KE86bbaqaofgrcGfaiclfa8Kfg8KRbbahcl4ciGg8La8LciSg8LE86bbarcVfa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc7fa8Ka8Lfg8KRbbahciGghahciSghE86bbarctfa8Kahfg8KRbbaiRbeghco4g8La8LciSg8LE86bbarc91fa8Ka8Lfg8KRbbahcl4ciGg8La8LciSg8LE86bbarc4fa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc93fa8Ka8Lfg8KRbbahciGghahciSghE86bbarc94fa8Kahfg8KRbbaiRbdghco4g8La8LciSg8LE86bbarc95fa8Ka8Lfg8KRbbahcl4ciGg8La8LciSg8LE86bbarc96fa8Ka8Lfg8KRbbahcd4ciGg8La8LciSg8LE86bbarc97fa8Ka8Lfg8KRbbahciGghahciSghE86bbarc98fa8KahfghRbbaiRbigico4g8Ka8KciSg8KE86bbarc99faha8KfghRbbaicl4ciGg8Ka8KciSg8KE86bbarc9:faha8KfghRbbaicd4ciGg8Ka8KciSg8KE86bbarcufaha8KfgrRbbaiciGgiaiciSgiE86bbaraifhixdkaraiRbwaiRbbghcl4g8Ka8KcsSg8KE86bbaqaofgrcGfaicwfa8Kfg8KRbbahcsGghahcsSghE86bbarcVfa8KahfghRbbaiRbeg8Kcl4g8La8LcsSg8LE86bbarc7faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarctfaha8KfghRbbaiRbdg8Kcl4g8La8LcsSg8LE86bbarc91faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc4faha8KfghRbbaiRbig8Kcl4g8La8LcsSg8LE86bbarc93faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc94faha8KfghRbbaiRblg8Kcl4g8La8LcsSg8LE86bbarc95faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc96faha8KfghRbbaiRbvg8Kcl4g8La8LcsSg8LE86bbarc97faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc98faha8KfghRbbaiRbog8Kcl4g8La8LcsSg8LE86bbarc99faha8LfghRbba8KcsGg8Ka8KcsSg8KE86bbarc9:faha8KfghRbbaiRbrgicl4g8Ka8KcsSg8KE86bbarcufaha8KfgrRbbaicsGgiaicsSgiE86bbaraifhixekarai8Pbw83bwarai8Pbb83bbaiczfhikdnaoaC9pmbalcdfhlaoczfhraPai9RcL0mekkaoaC6moaimexokaCmva8FTmvkaqaAfhqa8Ecefg8Ecl9hmbkdndndndnawTmbasaYcd4fRbbgociGPlbedrbkaATmdazaYfh8Fazcjdfhhcbh8EaEhaina8FRbbhraahocbhlinaoahalfRbbgqce4cbaqceG9R7arfgr86bbaoadfhoaAalcefgl9hmbkaacefhaa8Fcefh8FahaAfhha8Ecefg8Ecl9hmbxikkaATmeazaYfhaazcjdfhhcbhoceh8EaKh8FinaEaofhlaa8Vbbhrcbhoinala8FaofRbbcwtahaofRbbgqVc;:FiGce4cbaqceG9R7arfgr87bbaladfhlaQaocefgofmbka8FaXfh8FcdhoaacdfhaahaXfhha8EceGhlcbh8EalmbxdkkaATmbaocl4h8EazaYfRbbhqcwhoa3hlinalRbbaotaqVhqalcefhlaocwfgoca9hmbkcbhhaEh8FaKhainazcjdfahfRbbhrcwhoaahlinalRbbaotarVhralaAfhlaocwfgoca9hmbkara8E94aq7hqcbhoa8Fhlinalaqao486bbalcefhlaocwfgoca9hmbka8Fadfh8FaacefhaahcefghaA9hmbkkaEclfhEa3clfh3aYclfgYad6mbkaza8AaAcufad2fadz:jjjjb8AaAaOfhOaihxaimbkc9:hoxdkcbc99aPax9RakSEhoxekc9:hokavcjqf8Kjjjjbaok:ysezu8Jjjjjbc;ae9Rgv8Kjjjjbc9:hodnalaeci9UgrcHf6mbcuhoaiRbbgwc;WeGc;Ge9hmbawcsGgDce0mbavc;abfcFecjez:kjjjb8Aav9cu83iUav9cu83i8Wav9cu83iyav9cu83iaav9cu83iKav9cu83izav9cu83iwav9cu83ibaialfc9WfhqaicefgwarfhldnaeTmbcmcsaDceSEhkcbhxcbhmcbhrcbhicbhoindnalaq9nmbc9:hoxikdndnawRbbgDc;Ve0mbavc;abfaoaDcu7gPcl4fcsGcitfgsydlhzasydbhHdndnaDcsGgsak9pmbavaiaPfcsGcdtfydbaxasEhDaxasTgOfhxxekdndnascsSmbcehOasc987asamffcefhDxekalcefhDal8SbbgscFeGhPdndnascu9mmbaDhlxekalcvfhlaPcFbGhPcrhsdninaD8SbbgOcFbGastaPVhPaOcu9kmeaDcefhDascrfgsc8J9hmbxdkkaDcefhlkcehOaPce4cbaPceG9R7amfhDkaDhmkavc;abfaocitfgsaDBdbasazBdlavaicdtfaDBdbavc;abfaocefcsGcitfgsaHBdbasaDBdlaocdfhoaOaifhidnadcd9hmbabarcetfgsaH87ebasclfaD87ebascdfaz87ebxdkabarcdtfgsaHBdbascwfaDBdbasclfazBdbxekdnaDcpe0mbavaiaqaDcsGfRbbgscl4gP9RcsGcdtfydbaxcefgOaPEhDavaias9RcsGcdtfydbaOaPTgzfgOascsGgPEhsaPThPdndnadcd9hmbabarcetfgHax87ebaHclfas87ebaHcdfaD87ebxekabarcdtfgHaxBdbaHcwfasBdbaHclfaDBdbkavaicdtfaxBdbavc;abfaocitfgHaDBdbaHaxBdlavaicefgicsGcdtfaDBdbavc;abfaocefcsGcitfgHasBdbaHaDBdlavaiazfgicsGcdtfasBdbavc;abfaocdfcsGcitfgDaxBdbaDasBdlaocifhoaiaPfhiaOaPfhxxekaxcbalRbbgsEgHaDc;:eSgDfhOascsGhAdndnascl4gCmbaOcefhzxekaOhzavaiaC9RcsGcdtfydbhOkdndnaAmbazcefhxxekazhxavaias9RcsGcdtfydbhzkdndnaDTmbalcefhDxekalcdfhDal8SbegPcFeGhsdnaPcu9kmbalcofhHascFbGhscrhldninaD8SbbgPcFbGaltasVhsaPcu9kmeaDcefhDalcrfglc8J9hmbkaHhDxekaDcefhDkasce4cbasceG9R7amfgmhHkdndnaCcsSmbaDhsxekaDcefhsaD8SbbglcFeGhPdnalcu9kmbaDcvfhOaPcFbGhPcrhldninas8SbbgDcFbGaltaPVhPaDcu9kmeascefhsalcrfglc8J9hmbkaOhsxekascefhskaPce4cbaPceG9R7amfgmhOkdndnaAcsSmbashlxekascefhlas8SbbgDcFeGhPdnaDcu9kmbascvfhzaPcFbGhPcrhDdninal8SbbgscFbGaDtaPVhPascu9kmealcefhlaDcrfgDc8J9hmbkazhlxekalcefhlkaPce4cbaPceG9R7amfgmhzkdndnadcd9hmbabarcetfgDaH87ebaDclfaz87ebaDcdfaO87ebxekabarcdtfgDaHBdbaDcwfazBdbaDclfaOBdbkavc;abfaocitfgDaOBdbaDaHBdlavaicdtfaHBdbavc;abfaocefcsGcitfgDazBdbaDaOBdlavaicefgicsGcdtfaOBdbavc;abfaocdfcsGcitfgDaHBdbaDazBdlavaiaCTaCcsSVfgicsGcdtfazBdbaiaATaAcsSVfhiaocifhokawcefhwaocsGhoaicsGhiarcifgrae6mbkkcbc99alaqSEhokavc;aef8Kjjjjbaok:clevu8Jjjjjbcz9Rhvdnalaecvf9pmbc9:skdnaiRbbc;:eGc;qeSmbcuskav9cb83iwaicefhoaialfc98fhrdnaeTmbdnadcdSmbcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcdtfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgiBdbalaiBdbawcefgwae9hmbxdkkcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcetfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgi87ebalaiBdbawcefgwae9hmbkkcbc99aoarSEk:Lvoeue99dud99eud99dndnadcl9hmbaeTmeindndnabcdfgd8Sbb:Yab8Sbbgi:Ygl:l:tabcefgv8Sbbgo:Ygr:l:tgwJbb;:9cawawNJbbbbawawJbbbb9GgDEgq:mgkaqaicb9iEalMgwawNakaqaocb9iEarMgqaqNMM:r:vglNJbbbZJbbb:;aDEMgr:lJbbb9p9DTmbar:Ohixekcjjjj94hikadai86bbdndnaqalNJbbbZJbbb:;aqJbbbb9GEMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkavad86bbdndnawalNJbbbZJbbb:;awJbbbb9GEMgw:lJbbb9p9DTmbaw:Ohdxekcjjjj94hdkabad86bbabclfhbaecufgembxdkkaeTmbindndnabclfgd8Ueb:Yab8Uebgi:Ygl:l:tabcdfgv8Uebgo:Ygr:l:tgwJb;:FSawawNJbbbbawawJbbbb9GgDEgq:mgkaqaicb9iEalMgwawNakaqaocb9iEarMgqaqNMM:r:vglNJbbbZJbbb:;aDEMgr:lJbbb9p9DTmbar:Ohixekcjjjj94hikadai87ebdndnaqalNJbbbZJbbb:;aqJbbbb9GEMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkavad87ebdndnawalNJbbbZJbbb:;awJbbbb9GEMgw:lJbbb9p9DTmbaw:Ohdxekcjjjj94hdkabad87ebabcwfhbaecufgembkkk:4ioiue99dud99dud99dnaeTmbcbhiabhlindndnal8Uebgv:YgoJ:ji:1Salcof8UebgrciVgw:Y:vgDNJbbbZJbbb:;avcu9kEMgq:lJbbb9p9DTmbaq:Ohkxekcjjjj94hkkalclf8Uebhvalcdf8UebhxalarcefciGcetfak87ebdndnax:YgqaDNJbbbZJbbb:;axcu9kEMgm:lJbbb9p9DTmbam:Ohxxekcjjjj94hxkabaiarciGgkfcd7cetfax87ebdndnav:YgmaDNJbbbZJbbb:;avcu9kEMgP:lJbbb9p9DTmbaP:Ohvxekcjjjj94hvkalarcufciGcetfav87ebdndnawaw2:ZgPaPMaoaoN:taqaqN:tamamN:tgoJbbbbaoJbbbb9GE:raDNJbbbZMgD:lJbbb9p9DTmbaD:Ohrxekcjjjj94hrkalakcetfar87ebalcwfhlaiclfhiaecufgembkkk9mbdnadcd4ae2gdTmbinababydbgecwtcw91:Yaece91cjjj98Gcjjj;8if::NUdbabclfhbadcufgdmbkkk:Tvirud99eudndnadcl9hmbaeTmeindndnabRbbgiabcefgl8Sbbgvabcdfgo8Sbbgrf9R:YJbbuJabcifgwRbbgdce4adVgDcd4aDVgDcl4aDVgD:Z:vgqNJbbbZMgk:lJbbb9p9DTmbak:Ohxxekcjjjj94hxkaoax86bbdndnaraif:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohoxekcjjjj94hokalao86bbdndnavaifar9R:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohixekcjjjj94hikabai86bbdndnaDadcetGadceGV:ZaqNJbbbZMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkawad86bbabclfhbaecufgembxdkkaeTmbindndnab8Vebgiabcdfgl8Uebgvabclfgo8Uebgrf9R:YJbFu9habcofgw8Vebgdce4adVgDcd4aDVgDcl4aDVgDcw4aDVgD:Z:vgqNJbbbZMgk:lJbbb9p9DTmbak:Ohxxekcjjjj94hxkaoax87ebdndnaraif:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohoxekcjjjj94hokalao87ebdndnavaifar9R:YaqNJbbbZMgk:lJbbb9p9DTmbak:Ohixekcjjjj94hikabai87ebdndnaDadcetGadceGV:ZaqNJbbbZMgq:lJbbb9p9DTmbaq:Ohdxekcjjjj94hdkawad87ebabcwfhbaecufgembkkk9teiucbcbyd:K:G:cjbgeabcifc98GfgbBd:K:G:cjbdndnabZbcztgd9nmbcuhiabad9RcFFifcz4nbcuSmekaehikaik;LeeeudndnaeabVciGTmbabhixekdndnadcz9pmbabhixekabhiinaiaeydbBdbaiclfaeclfydbBdbaicwfaecwfydbBdbaicxfaecxfydbBdbaeczfheaiczfhiadc9Wfgdcs0mbkkadcl6mbinaiaeydbBdbaeclfheaiclfhiadc98fgdci0mbkkdnadTmbinaiaeRbb86bbaicefhiaecefheadcufgdmbkkabk;aeedudndnabciGTmbabhixekaecFeGc:b:c:ew2hldndnadcz9pmbabhixekabhiinaialBdbaicxfalBdbaicwfalBdbaiclfalBdbaiczfhiadc9Wfgdcs0mbkkadcl6mbinaialBdbaiclfhiadc98fgdci0mbkkdnadTmbinaiae86bbaicefhiadcufgdmbkkabkk83dbcj:Gdk8Kbbbbdbbblbbbwbbbbbbbebbbdbbblbbbwbbbbc:K:Gdkl8W:qbb'; // embed! base
+  	var wasm_simd =
+  		'b9H79TebbbeKl9Gbb9Gvuuuuueu9Giuuub9Geueuixkbbebeeddddilve9Weeeviebeoweuecj:Gdkr;Neqo9TW9T9VV95dbH9F9F939H79T9F9J9H229F9Jt9VV7bb8A9TW79O9V9Wt9F9KW9J9V9KW9wWVtW949c919M9MWVbdY9TW79O9V9Wt9F9KW9J9V9KW69U9KW949c919M9MWVblE9TW79O9V9Wt9F9KW9J9V9KW69U9KW949tWG91W9U9JWbvL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9p9JtboK9TW79O9V9Wt9F9KW9J9V9KWS9P2tWV9r919HtbrL9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVT949WbwY9TW79O9V9Wt9F9KW9J9V9KWS9P2tWVJ9V29VVbDl79IV9Rbqq:59Dklbzik94evu8Jjjjjbcz9Rhbcbheincbhdcbhiinabcwfadfaicjuaead4ceGglE86bbaialfhiadcefgdcw9hmbkaeai86b:q:W:cjbaecitab8Piw83i:q:G:cjbaecefgecjd9hmbkk:SBlEud97dur978Jjjjjbcj;kb9Rgv8Kjjjjbc9:hodnalTmbcuhoaiRbbgrc;WeGc:Ge9hmbarcsGgwce0mbc9:hoalcufadcd4cbawEgDadfgrcKcaawEgqaraq0Egk6mbaialfgxar9RhodnadTgmmbavaoad;8qbbkaicefhPcj;abad9Uc;WFbGcjdadca0EhsdndndnadTmbaoadfhzcbhHinaeaH9nmdaxaP9RaD6miabaHad2fgOavcjdfasaeaH9RaHasfae6EgAaAcsfgoc9WGgCSEhXaPaDfhQaocl4cifcd4hLavcj;cbfaCcetfhKavcj;cbfaCci2fhYavcj;cbfaCfh8AcbhEaoc;ab6h3incbh5dnawTmbaPaEcd4fRbbh5kcbh8Eavcj;cbfh8Findndndndna5a8Ecet4ciGgoc9:fPdebdkaxaQ9RaC6mwdnaCTmbavcj;cbfa8EaC2faQaC;8qbbkaQaAfhQxdkaCTmeavcj;cbfa8EaC2fcbaC;8kbxekaxaQ9RaL6moaoclVcbawEhraQaLfhocbhidna3mbaxao9Rc;Gb6mbcbhlina8FalfhidndndndndndnaQalco4fRbbgqciGarfPDbedibledibkaipxbbbbbbbbbbbbbbbbpklbxlkaiaopbblaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLgacdp:meaapmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9oghpxiiiiiiiiiiiiiiiip8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaoclffa8JRb:q:W:cjbfhoxikaiaopbbwaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLpxssssssssssssssssp9oghpxssssssssssssssssp8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaocwffa8JRb:q:W:cjbfhoxdkaiaopbbbpklbaoczfhoxekaiaopbbdaoRbbggcitpbi:q:G:cjbagRb:q:W:cjbggpsaoRbeg8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbagaocdffa8JRb:q:W:cjbfhokdndndndndndnaqcd4ciGarfPDbedibledibkaiczfpxbbbbbbbbbbbbbbbbpklbxlkaiczfaopbblaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLgacdp:meaapmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9oghpxiiiiiiiiiiiiiiiip8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaoclffa8JRb:q:W:cjbfhoxikaiczfaopbbwaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLpxssssssssssssssssp9oghpxssssssssssssssssp8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaocwffa8JRb:q:W:cjbfhoxdkaiczfaopbbbpklbaoczfhoxekaiczfaopbbdaoRbbggcitpbi:q:G:cjbagRb:q:W:cjbggpsaoRbeg8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbagaocdffa8JRb:q:W:cjbfhokdndndndndndnaqcl4ciGarfPDbedibledibkaicafpxbbbbbbbbbbbbbbbbpklbxlkaicafaopbblaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLgacdp:meaapmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9oghpxiiiiiiiiiiiiiiiip8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaoclffa8JRb:q:W:cjbfhoxikaicafaopbbwaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLpxssssssssssssssssp9oghpxssssssssssssssssp8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbagaocwffa8JRb:q:W:cjbfhoxdkaicafaopbbbpklbaoczfhoxekaicafaopbbdaoRbbggcitpbi:q:G:cjbagRb:q:W:cjbggpsaoRbeg8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbagaocdffa8JRb:q:W:cjbfhokdndndndndndnaqco4arfPDbedibledibkaic8Wfpxbbbbbbbbbbbbbbbbpklbxlkaic8Wfaopbblaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLgacdp:meaapmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9oghpxiiiiiiiiiiiiiiiip8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Ngicitpbi:q:G:cjbaiRb:q:W:cjbgipsaap5e9cjF;8;4;W;G;ab9:9cU1:Ngqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbaiaoclffaqRb:q:W:cjbfhoxikaic8Wfaopbbwaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLpxssssssssssssssssp9oghpxssssssssssssssssp8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Ngicitpbi:q:G:cjbaiRb:q:W:cjbgipsaap5e9cjF;8;4;W;G;ab9:9cU1:Ngqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spklbaiaocwffaqRb:q:W:cjbfhoxdkaic8Wfaopbbbpklbaoczfhoxekaic8WfaopbbdaoRbbgicitpbi:q:G:cjbaiRb:q:W:cjbgipsaoRbegqcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpklbaiaocdffaqRb:q:W:cjbfhokalc;abfhialcjefaC0meaihlaxao9Rc;Fb0mbkkdnaiaC9pmbaici4hlinaxao9RcK6mwa8FaifhqdndndndndndnaQaico4fRbbalcoG4ciGarfPDbedibledibkaqpxbbbbbbbbbbbbbbbbpkbbxlkaqaopbblaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLgacdp:meaapmbzeHdOiAlCvXoQrLpxiiiiiiiiiiiiiiiip9oghpxiiiiiiiiiiiiiiiip8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spkbbagaoclffa8JRb:q:W:cjbfhoxikaqaopbbwaopbbbgaclp:meaapmbzeHdOiAlCvXoQrLpxssssssssssssssssp9oghpxssssssssssssssssp8Jgap5b9cjF;8;4;W;G;ab9:9cU1:Nggcitpbi:q:G:cjbagRb:q:W:cjbggpsaap5e9cjF;8;4;W;G;ab9:9cU1:Ng8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPahaap9spkbbagaocwffa8JRb:q:W:cjbfhoxdkaqaopbbbpkbbaoczfhoxekaqaopbbdaoRbbggcitpbi:q:G:cjbagRb:q:W:cjbggpsaoRbeg8Jcitpbi:q:G:cjbp9UpmbedilvorzHOACXQLpPpkbbagaocdffa8JRb:q:W:cjbfhokalcdfhlaiczfgiaC6mbkkaohQaoTmoka8FaCfh8Fa8Ecefg8Ecl9hmbkdndndndnawTmbazaEcd4fRbbglciGPlbedwbkaCTmdaXaEfhlavaEfpbdbh8Kcbhoinalavcj;cbfaofpblbg8La8Aaofpblbg8MpmbzeHdOiAlCvXoQrLg8NaKaofpblbgyaYaofpblbg8PpmbzeHdOiAlCvXoQrLgIpmbezHdiOAlvCXorQLgacep9Taapxeeeeeeeeeeeeeeeeghp9op9Hp9rgaa8Kp9Ug8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp9Ug8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp9Ug8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp9Ug8Kp9Abbbaladfgla8Ka8NaIpmwDKYqk8AExm35Ps8E8Fgacep9Taaahp9op9Hp9rgap9Ug8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp9Ug8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp9Ug8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp9Ug8Kp9Abbbaladfgla8Ka8La8MpmwKDYq8AkEx3m5P8Es8Fg8Laya8PpmwKDYq8AkEx3m5P8Es8Fg8MpmbezHdiOAlvCXorQLgacep9Taaahp9op9Hp9rgap9Ug8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp9Ug8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp9Ug8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp9Ug8Kp9Abbbaladfgla8Ka8La8MpmwDKYqk8AExm35Ps8E8Fgacep9Taaahp9op9Hp9rgap9Ughp9Abbbaladfglahaaaapmlvorlvorlvorlvorp9Ughp9AbbbaladfglahaaaapmwDqkwDqkwDqkwDqkp9Ughp9AbbbaladfglahaaaapmxmPsxmPsxmPsxmPsp9Ug8Kp9AbbbaladfhlaoczfgoaC6mbxikkaCTmeaXaEfhlavaEfpbdbh8Kcbhoinalavcj;cbfaofpblbg8La8Aaofpblbg8MpmbzeHdOiAlCvXoQrLg8NaKaofpblbgyaYaofpblbg8PpmbzeHdOiAlCvXoQrLgIpmbezHdiOAlvCXorQLgacep:neaapxebebebebebebebebghp9op:bep9rgaa8Kp:oeg8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp:oeg8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp:oeg8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp:oeg8Kp9Abbbaladfgla8Ka8NaIpmwDKYqk8AExm35Ps8E8Fgacep:neaaahp9op:bep9rgap:oeg8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp:oeg8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp:oeg8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp:oeg8Kp9Abbbaladfgla8Ka8La8MpmwKDYq8AkEx3m5P8Es8Fg8Laya8PpmwKDYq8AkEx3m5P8Es8Fg8MpmbezHdiOAlvCXorQLgacep:neaaahp9op:bep9rgap:oeg8Kp9Abbbaladfgla8Kaaaapmlvorlvorlvorlvorp:oeg8Kp9Abbbaladfgla8KaaaapmwDqkwDqkwDqkwDqkp:oeg8Kp9Abbbaladfgla8KaaaapmxmPsxmPsxmPsxmPsp:oeg8Kp9Abbbaladfgla8Ka8La8MpmwDKYqk8AExm35Ps8E8Fgacep:neaaahp9op:bep9rgap:oeghp9Abbbaladfglahaaaapmlvorlvorlvorlvorp:oeghp9AbbbaladfglahaaaapmwDqkwDqkwDqkwDqkp:oeghp9AbbbaladfglahaaaapmxmPsxmPsxmPsxmPsp:oeg8Kp9AbbbaladfhlaoczfgoaC6mbxdkkaCTmbaXaEfhrcbhocbalcl4gl9Rc8FGhiavaEfpbdbhhinaravcj;cbfaofpblbg8Ka8Aaofpblbg8LpmbzeHdOiAlCvXoQrLg8MaKaofpblbg8NaYaofpblbgypmbzeHdOiAlCvXoQrLg8PpmbezHdiOAlvCXorQLgaaip:Reaaalp:Tep9qgaahp9rghp9Abbbaradfgrahaaaapmlvorlvorlvorlvorp9rghp9AbbbaradfgrahaaaapmwDqkwDqkwDqkwDqkp9rghp9AbbbaradfgrahaaaapmxmPsxmPsxmPsxmPsp9rghp9Abbbaradfgraha8Ma8PpmwDKYqk8AExm35Ps8E8Fgaaip:Reaaalp:Tep9qgap9rghp9Abbbaradfgrahaaaapmlvorlvorlvorlvorp9rghp9AbbbaradfgrahaaaapmwDqkwDqkwDqkwDqkp9rghp9AbbbaradfgrahaaaapmxmPsxmPsxmPsxmPsp9rghp9Abbbaradfgraha8Ka8LpmwKDYq8AkEx3m5P8Es8Fg8Ka8NaypmwKDYq8AkEx3m5P8Es8Fg8LpmbezHdiOAlvCXorQLgaaip:Reaaalp:Tep9qgap9rghp9Abbbaradfgrahaaaapmlvorlvorlvorlvorp9rghp9AbbbaradfgrahaaaapmwDqkwDqkwDqkwDqkp9rghp9AbbbaradfgrahaaaapmxmPsxmPsxmPsxmPsp9rghp9Abbbaradfgraha8Ka8LpmwDKYqk8AExm35Ps8E8Fgaaip:Reaaalp:Tep9qgap9rghp9Abbbaradfgrahaaaapmlvorlvorlvorlvorp9rghp9AbbbaradfgrahaaaapmwDqkwDqkwDqkwDqkp9rghp9AbbbaradfgrahaaaapmxmPsxmPsxmPsxmPsp9rghp9AbbbaradfhraoczfgoaC6mbkkaEclfgEad6mbkdnaXavcjdf9hmbaAad2goTmbaOavcjdfao;8qbbkdnammbavaXaAcufad2fad;8qbbkaAaHfhHc9:hoaQhPaQmbxlkkaeTmbaDalfhrcbhocuhlinaralaD9RglfaD6mdasaeao9Raoasfae6Eaofgoae6mbkaial9RhPkcbc99axaP9RakSEhoxekc9:hokavcj;kbf8Kjjjjbaokwbz:bjjjbkNsezu8Jjjjjbc;ae9Rgv8Kjjjjbc9:hodnalaeci9UgrcHf6mbcuhoaiRbbgwc;WeGc;Ge9hmbawcsGgDce0mbavc;abfcFecje;8kbav9cu83iUav9cu83i8Wav9cu83iyav9cu83iaav9cu83iKav9cu83izav9cu83iwav9cu83ibaialfc9WfhqaicefgwarfhldnaeTmbcmcsaDceSEhkcbhxcbhmcbhrcbhicbhoindnalaq9nmbc9:hoxikdndnawRbbgDc;Ve0mbavc;abfaoaDcu7gPcl4fcsGcitfgsydlhzasydbhHdndnaDcsGgsak9pmbavaiaPfcsGcdtfydbaxasEhDaxasTgOfhxxekdndnascsSmbcehOasc987asamffcefhDxekalcefhDal8SbbgscFeGhPdndnascu9mmbaDhlxekalcvfhlaPcFbGhPcrhsdninaD8SbbgOcFbGastaPVhPaOcu9kmeaDcefhDascrfgsc8J9hmbxdkkaDcefhlkcehOaPce4cbaPceG9R7amfhDkaDhmkavc;abfaocitfgsaDBdbasazBdlavaicdtfaDBdbavc;abfaocefcsGcitfgsaHBdbasaDBdlaocdfhoaOaifhidnadcd9hmbabarcetfgsaH87ebasclfaD87ebascdfaz87ebxdkabarcdtfgsaHBdbascwfaDBdbasclfazBdbxekdnaDcpe0mbavaiaqaDcsGfRbbgscl4gP9RcsGcdtfydbaxcefgOaPEhDavaias9RcsGcdtfydbaOaPTgzfgOascsGgPEhsaPThPdndnadcd9hmbabarcetfgHax87ebaHclfas87ebaHcdfaD87ebxekabarcdtfgHaxBdbaHcwfasBdbaHclfaDBdbkavaicdtfaxBdbavc;abfaocitfgHaDBdbaHaxBdlavaicefgicsGcdtfaDBdbavc;abfaocefcsGcitfgHasBdbaHaDBdlavaiazfgicsGcdtfasBdbavc;abfaocdfcsGcitfgDaxBdbaDasBdlaocifhoaiaPfhiaOaPfhxxekaxcbalRbbgsEgHaDc;:eSgDfhOascsGhAdndnascl4gCmbaOcefhzxekaOhzavaiaC9RcsGcdtfydbhOkdndnaAmbazcefhxxekazhxavaias9RcsGcdtfydbhzkdndnaDTmbalcefhDxekalcdfhDal8SbegPcFeGhsdnaPcu9kmbalcofhHascFbGhscrhldninaD8SbbgPcFbGaltasVhsaPcu9kmeaDcefhDalcrfglc8J9hmbkaHhDxekaDcefhDkasce4cbasceG9R7amfgmhHkdndnaCcsSmbaDhsxekaDcefhsaD8SbbglcFeGhPdnalcu9kmbaDcvfhOaPcFbGhPcrhldninas8SbbgDcFbGaltaPVhPaDcu9kmeascefhsalcrfglc8J9hmbkaOhsxekascefhskaPce4cbaPceG9R7amfgmhOkdndnaAcsSmbashlxekascefhlas8SbbgDcFeGhPdnaDcu9kmbascvfhzaPcFbGhPcrhDdninal8SbbgscFbGaDtaPVhPascu9kmealcefhlaDcrfgDc8J9hmbkazhlxekalcefhlkaPce4cbaPceG9R7amfgmhzkdndnadcd9hmbabarcetfgDaH87ebaDclfaz87ebaDcdfaO87ebxekabarcdtfgDaHBdbaDcwfazBdbaDclfaOBdbkavc;abfaocitfgDaOBdbaDaHBdlavaicdtfaHBdbavc;abfaocefcsGcitfgDazBdbaDaOBdlavaicefgicsGcdtfaOBdbavc;abfaocdfcsGcitfgDaHBdbaDazBdlavaiaCTaCcsSVfgicsGcdtfazBdbaiaATaAcsSVfhiaocifhokawcefhwaocsGhoaicsGhiarcifgrae6mbkkcbc99alaqSEhokavc;aef8Kjjjjbaok:clevu8Jjjjjbcz9Rhvdnalaecvf9pmbc9:skdnaiRbbc;:eGc;qeSmbcuskav9cb83iwaicefhoaialfc98fhrdnaeTmbdnadcdSmbcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcdtfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgiBdbalaiBdbawcefgwae9hmbxdkkcbhwindnaoar6mbc9:skaocefhlao8SbbgicFeGhddndnaicu9mmbalhoxekaocvfhoadcFbGhdcrhidninal8SbbgDcFbGaitadVhdaDcu9kmealcefhlaicrfgic8J9hmbxdkkalcefhokabawcetfadc8Etc8F91adcd47avcwfadceGcdtVglydbfgi87ebalaiBdbawcefgwae9hmbkkcbc99aoarSEk;Toio97eue97aec98Ghedndnadcl9hmbaeTmecbhdinababpbbbgicKp:RecKp:Sep;6eglaicwp:RecKp:Sep;6ealp;Geaiczp:RecKp:Sep;6egvp;Gep;Kep;Legopxbbbbbbbbbbbbbbbbp:2egralpxbbbjbbbjbbbjbbbjgwp9op9rp;Keglpxbb;:9cbb;:9cbb;:9cbb;:9calalp;Meaoaop;Meavaravawp9op9rp;Keglalp;Mep;Kep;Kep;Jep;Negvp;Mepxbbn0bbn0bbn0bbn0grp;KepxFbbbFbbbFbbbFbbbp9oaipxbbbFbbbFbbbFbbbFp9op9qalavp;Mearp;Kecwp:RepxbFbbbFbbbFbbbFbbp9op9qaoavp;Mearp;Keczp:RepxbbFbbbFbbbFbbbFbp9op9qpkbbabczfhbadclfgdae6mbxdkkaeTmbcbhdinabczfgDaDpbbbgipxbbbbbbFFbbbbbbFFgwp9oabpbbbgoaipmbediwDqkzHOAKY8AEgvczp:Reczp:Sep;6eglaoaipmlvorxmPsCXQL358E8FpxFubbFubbFubbFubbp9op;6eavczp:Sep;6egvp;Gealp;Gep;Kep;Legipxbbbbbbbbbbbbbbbbp:2egralpxbbbjbbbjbbbjbbbjgqp9op9rp;Keglpxb;:FSb;:FSb;:FSb;:FSalalp;Meaiaip;Meavaravaqp9op9rp;Keglalp;Mep;Kep;Kep;Jep;Negvp;Mepxbbn0bbn0bbn0bbn0grp;KepxFFbbFFbbFFbbFFbbp9oaiavp;Mearp;Keczp:Rep9qgialavp;Mearp;KepxFFbbFFbbFFbbFFbbp9oglpmwDKYqk8AExm35Ps8E8Fp9qpkbbabaoawp9oaialpmbezHdiOAlvCXorQLp9qpkbbabcafhbadclfgdae6mbkkk;2ileue97euo97dnaec98GgiTmbcbheinabcKfpx:ji:1S:ji:1S:ji:1S:ji:1SabpbbbglabczfgvpbbbgopmlvorxmPsCXQL358E8Fgrczp:Segwpxibbbibbbibbbibbbp9qp;6egDp;NegqaDaDp;MegDaDp;KealaopmbediwDqkzHOAKY8AEgDczp:Reczp:Sep;6eglalp;MeaDczp:Sep;6egoaop;Mearczp:Reczp:Sep;6egrarp;Mep;Kep;Kep;Lepxbbbbbbbbbbbbbbbbp:4ep;Jep;Mepxbbn0bbn0bbn0bbn0gDp;KepxFFbbFFbbFFbbFFbbgkp9oaqaop;MeaDp;Keczp:Rep9qgoaqalp;MeaDp;Keakp9oaqarp;MeaDp;Keczp:Rep9qgDpmwDKYqk8AExm35Ps8E8Fglp5eawclp:RegqpEi:T:j83ibavalp5baqpEd:T:j83ibabcwfaoaDpmbezHdiOAlvCXorQLgDp5eaqpEe:T:j83ibabaDp5baqpEb:T:j83ibabcafhbaeclfgeai6mbkkkuee97dnadcd4ae2c98GgeTmbcbhdinababpbbbgicwp:Recwp:Sep;6eaicep:SepxbbjFbbjFbbjFbbjFp9opxbbjZbbjZbbjZbbjZp:Uep;Mepkbbabczfhbadclfgdae6mbkkk:Sodw97euaec98Ghedndnadcl9hmbaeTmecbhdinabpxbbuJbbuJbbuJbbuJabpbbbgicKp:TeglaicYp:Tep9qgvcdp:Teavp9qgvclp:Teavp9qgop;6ep;Negvaicwp:RecKp:SegraipxFbbbFbbbFbbbFbbbgwp9ogDp:Uep;6ep;Mepxbbn0bbn0bbn0bbn0gqp;Kecwp:RepxbFbbbFbbbFbbbFbbp9oavaDarp:Xeaiczp:RecKp:Segip:Uep;6ep;Meaqp;Keawp9op9qavaDaraip:Uep:Xep;6ep;Meaqp;Keczp:RepxbbFbbbFbbbFbbbFbp9op9qavaoalcep:Rep9oalpxebbbebbbebbbebbbp9op9qp;6ep;Meaqp;KecKp:Rep9qpkbbabczfhbadclfgdae6mbxdkkaeTmbcbhdinabczfgkpxbFu9hbFu9hbFu9hbFu9habpbbbglakpbbbgrpmlvorxmPsCXQL358E8Fgvczp:TegqavcHp:Tep9qgicdp:Teaip9qgiclp:Teaip9qgicwp:Teaip9qgop;6ep;NegialarpmbediwDqkzHOAKY8AEgDpxFFbbFFbbFFbbFFbbglp9ograDczp:Segwp:Ueavczp:Reczp:SegDp:Xep;6ep;Mepxbbn0bbn0bbn0bbn0gvp;Kealp9oaiarawaDp:Uep:Xep;6ep;Meavp;Keczp:Rep9qgwaiaoaqcep:Rep9oaqpxebbbebbbebbbebbbp9op9qp;6ep;Meavp;Keczp:ReaiaDarp:Uep;6ep;Meavp;Kealp9op9qgipmwDKYqk8AExm35Ps8E8FpkbbabawaipmbezHdiOAlvCXorQLpkbbabcafhbadclfgdae6mbkkk9teiucbcbydj:G:cjbgeabcifc98GfgbBdj:G:cjbdndnabZbcztgd9nmbcuhiabad9RcFFifcz4nbcuSmekaehikaikkxebcj:Gdklz:zbb'; // embed! simd
+  
+  	var detector = new Uint8Array([
+  		0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 3, 2, 0, 0, 5, 3, 1, 0, 1, 12, 1, 0, 10, 22, 2, 12, 0, 65, 0, 65, 0, 65, 0, 252, 10, 0, 0,
+  		11, 7, 0, 65, 0, 253, 15, 26, 11,
+  	]);
+  	var wasmpack = new Uint8Array([
+  		32, 0, 65, 2, 1, 106, 34, 33, 3, 128, 11, 4, 13, 64, 6, 253, 10, 7, 15, 116, 127, 5, 8, 12, 40, 16, 19, 54, 20, 9, 27, 255, 113, 17, 42, 67,
+  		24, 23, 146, 148, 18, 14, 22, 45, 70, 69, 56, 114, 101, 21, 25, 63, 75, 136, 108, 28, 118, 29, 73, 115,
+  	]);
+  
+  	if (typeof WebAssembly !== 'object') {
+  		return {
+  			supported: false,
+  		};
+  	}
+  
+  	var wasm = WebAssembly.validate(detector) ? unpack(wasm_simd) : unpack(wasm_base);
+  
+  	var instance;
+  
+  	var ready = WebAssembly.instantiate(wasm, {}).then(function (result) {
+  		instance = result.instance;
+  		instance.exports.__wasm_call_ctors();
+  	});
+  
+  	function unpack(data) {
+  		var result = new Uint8Array(data.length);
+  		for (var i = 0; i < data.length; ++i) {
+  			var ch = data.charCodeAt(i);
+  			result[i] = ch > 96 ? ch - 97 : ch > 64 ? ch - 39 : ch + 4;
+  		}
+  		var write = 0;
+  		for (var i = 0; i < data.length; ++i) {
+  			result[write++] = result[i] < 60 ? wasmpack[result[i]] : (result[i] - 60) * 64 + result[++i];
+  		}
+  		return result.buffer.slice(0, write);
+  	}
+  
+  	function decode(instance, fun, target, count, size, source, filter) {
+  		var sbrk = instance.exports.sbrk;
+  		var count4 = (count + 3) & ~3;
+  		var tp = sbrk(count4 * size);
+  		var sp = sbrk(source.length);
+  		var heap = new Uint8Array(instance.exports.memory.buffer);
+  		heap.set(source, sp);
+  		var res = fun(tp, count, size, sp, source.length);
+  		if (res == 0 && filter) {
+  			filter(tp, count4, size);
+  		}
+  		target.set(heap.subarray(tp, tp + count * size));
+  		sbrk(tp - sbrk(0));
+  		if (res != 0) {
+  			throw new Error('Malformed buffer data: ' + res);
+  		}
+  	}
+  
+  	var filters = {
+  		NONE: '',
+  		OCTAHEDRAL: 'meshopt_decodeFilterOct',
+  		QUATERNION: 'meshopt_decodeFilterQuat',
+  		EXPONENTIAL: 'meshopt_decodeFilterExp',
+  		COLOR: 'meshopt_decodeFilterColor',
+  	};
+  
+  	var decoders = {
+  		ATTRIBUTES: 'meshopt_decodeVertexBuffer',
+  		TRIANGLES: 'meshopt_decodeIndexBuffer',
+  		INDICES: 'meshopt_decodeIndexSequence',
+  	};
+  
+  	var workers = [];
+  	var requestId = 0;
+  
+  	function createWorker(url) {
+  		var worker = {
+  			object: new Worker(url),
+  			pending: 0,
+  			requests: {},
+  		};
+  
+  		worker.object.onmessage = function (event) {
+  			var data = event.data;
+  
+  			worker.pending -= data.count;
+  			worker.requests[data.id][data.action](data.value);
+  			delete worker.requests[data.id];
+  		};
+  
+  		return worker;
+  	}
+  
+  	function initWorkers(count) {
+  		var source =
+  			'self.ready = WebAssembly.instantiate(new Uint8Array([' +
+  			new Uint8Array(wasm) +
+  			']), {})' +
+  			'.then(function(result) { result.instance.exports.__wasm_call_ctors(); return result.instance; });' +
+  			'self.onmessage = ' +
+  			workerProcess.name +
+  			';' +
+  			decode.toString() +
+  			workerProcess.toString();
+  
+  		var blob = new Blob([source], { type: 'text/javascript' });
+  		var url = URL.createObjectURL(blob);
+  
+  		for (var i = workers.length; i < count; ++i) {
+  			workers[i] = createWorker(url);
+  		}
+  
+  		for (var i = count; i < workers.length; ++i) {
+  			workers[i].object.postMessage({});
+  		}
+  
+  		workers.length = count;
+  
+  		URL.revokeObjectURL(url);
+  	}
+  
+  	function decodeWorker(count, size, source, mode, filter) {
+  		var worker = workers[0];
+  
+  		for (var i = 1; i < workers.length; ++i) {
+  			if (workers[i].pending < worker.pending) {
+  				worker = workers[i];
+  			}
+  		}
+  
+  		return new Promise(function (resolve, reject) {
+  			var data = new Uint8Array(source);
+  			var id = ++requestId;
+  
+  			worker.pending += count;
+  			worker.requests[id] = { resolve: resolve, reject: reject };
+  			worker.object.postMessage({ id: id, count: count, size: size, source: data, mode: mode, filter: filter }, [data.buffer]);
+  		});
+  	}
+  
+  	function workerProcess(event) {
+  		var data = event.data;
+  		self.ready.then(function (instance) {
+  			if (!data.id) {
+  				return self.close();
+  			}
+  			try {
+  				var target = new Uint8Array(data.count * data.size);
+  				decode(instance, instance.exports[data.mode], target, data.count, data.size, data.source, instance.exports[data.filter]);
+  				self.postMessage({ id: data.id, count: data.count, action: 'resolve', value: target }, [target.buffer]);
+  			} catch (error) {
+  				self.postMessage({ id: data.id, count: data.count, action: 'reject', value: error });
+  			}
+  		});
+  	}
+  
+  	return {
+  		ready: ready,
+  		supported: true,
+  		useWorkers: function (count) {
+  			initWorkers(count);
+  		},
+  		decodeVertexBuffer: function (target, count, size, source, filter) {
+  			decode(instance, instance.exports.meshopt_decodeVertexBuffer, target, count, size, source, instance.exports[filters[filter]]);
+  		},
+  		decodeIndexBuffer: function (target, count, size, source) {
+  			decode(instance, instance.exports.meshopt_decodeIndexBuffer, target, count, size, source);
+  		},
+  		decodeIndexSequence: function (target, count, size, source) {
+  			decode(instance, instance.exports.meshopt_decodeIndexSequence, target, count, size, source);
+  		},
+  		decodeGltfBuffer: function (target, count, size, source, mode, filter) {
+  			decode(instance, instance.exports[decoders[mode]], target, count, size, source, instance.exports[filters[filter]]);
+  		},
+  		decodeGltfBufferAsync: function (count, size, source, mode, filter) {
+  			if (workers.length > 0) {
+  				return decodeWorker(count, size, source, decoders[mode], filters[filter]);
+  			}
+  
+  			return ready.then(function () {
+  				var target = new Uint8Array(count * size);
+  				decode(instance, instance.exports[decoders[mode]], target, count, size, source, instance.exports[filters[filter]]);
+  				return target;
+  			});
+  		},
+  	};
+  })();
+  
+  if (typeof exports === 'object' && typeof module === 'object') module.exports = MeshoptDecoder;
+  else if (typeof define === 'function' && define['amd']) define([], function () { return MeshoptDecoder; });
+  else if (typeof exports === 'object') exports['MeshoptDecoder'] = MeshoptDecoder;
+  else (typeof self !== 'undefined' ? self : this).MeshoptDecoder = MeshoptDecoder;
+  
+  return module.exports;})();
+  var STY_HEX={"#171717": [0.008568125618069307, 0.008568125618069307, 0.008568125618069307], "#4c79e7": [0.07227185068231748, 0.19120168274079138, 0.799102738014409], "#7c7277": [0.20155625379439707, 0.16826940018969075, 0.184474994500441], "#a9ffff": [0.39675523072562685, 1.0, 1.0], "#bb68e7": [0.4969329950608704, 0.13843161503245183, 0.799102738014409], "#e72320": [0.799102738014409, 0.016807375752887384, 0.014443843596092545], "#a30c14": [0.3662525955988395, 0.003676507324047436, 0.006995410187265387], "#4f4f56": [0.07818742180518633, 0.07818742180518633, 0.09305896284668745], "#e7e7e7": [0.799102738014409, 0.799102738014409, 0.799102738014409], "#bbbbbb": [0.4969329950608704, 0.4969329950608704, 0.4969329950608704], "#ffcf58": [1.0, 0.6239603916750761, 0.09758734714186246], "#469c2e": [0.06124605423161761, 0.33245153634617935, 0.027320891639074894], "#2e3646": [0.027320891639074894, 0.03688945040110004, 0.06124605423161761], "#222833": [0.01599629336550963, 0.021219010376003555, 0.033104766570885055], "#1e3263": [0.012983032342173012, 0.03189603307301153, 0.12477181756095049], "#8e232c": [0.2704977910130658, 0.016807375752887384, 0.02518685962736163], "#52121a": [0.08437621154414882, 0.006048833022857054, 0.010329823029626936], "#c9973f": [0.5840784178911641, 0.30946892281750854, 0.04970656598412723], "#6a3fa0": [0.14412847085805777, 0.04970656598412723, 0.35153259950043936], "#35934b": [0.03560131487502034, 0.29177064981753587, 0.07036009569659588], "#8fe8ff": [0.27467731206038465, 0.8069522576692516, 1.0], "#12151c": [0.006048833022857054, 0.007499032043226175, 0.011612245179743885], "#060708": [0.001821161901293025, 0.0021246888848418626, 0.0024282158683907], "#262230": [0.019382360956935723, 0.01599629336550963, 0.0295568344378088], "#9e1b23": [0.3419144249086609, 0.010960094006488246, 0.016807375752887384], "#67272c": [0.13563332965520566, 0.0202885630566524, 0.02518685962736163], "#38090f": [0.03954623527673284, 0.0027317428519395373, 0.004776953480693729], "#5f0a10": [0.11443537382697373, 0.003035269835488375, 0.005181516702338386], "#e8b33c": [0.8069522576692516, 0.45078578283822346, 0.04518620438567554], "#b03060": [0.43415363617474895, 0.0295568344378088, 0.11697066775851084], "#ffd76a": [1.0, 0.6795424696330938, 0.14412847085805777], "#1c1114": [0.011612245179743885, 0.005605391624202723, 0.006995410187265387], "#0a0506": [0.003035269835488375, 0.0015176349177441874, 0.001821161901293025], "#33201f": [0.033104766570885055, 0.014443843596092545, 0.013702083047289686], "#edf0f4": [0.846873231509858, 0.8713671191987972, 0.9046611743911496], "#8e9bb5": [0.2704977910130658, 0.3277780980565422, 0.4620769996544071], "#2b4bc4": [0.024157632448504756, 0.07036009569659588, 0.5520114015120001], "#c8102e": [0.5775804404296506, 0.005181516702338386, 0.027320891639074894], "#7a0c1e": [0.1946178304415758, 0.003676507324047436, 0.012983032342173012], "#d4af37": [0.6583748172794485, 0.4286904966139066, 0.0382043715953465], "#6c3fd4": [0.14995978981060856, 0.04970656598412723, 0.6583748172794485], "#232a3a": [0.016807375752887384, 0.02315336617811041, 0.042311410620809675], "#0b0d12": [0.003346535763899161, 0.004024717018496307, 0.006048833022857054], "#2e2a33": [0.027320891639074894, 0.02315336617811041, 0.033104766570885055], "#ff5e73": [1.0, 0.1119324278369056, 0.1714411007328226], "#f43a52": [0.9046611743911496, 0.042311410620809675, 0.08437621154414882], "#ff4d6a": [1.0, 0.07421356838014963, 0.14412847085805777], "#ff2438": [1.0, 0.017641954488384078, 0.03954623527673284], "#e01230": [0.7454042095403874, 0.006048833022857054, 0.0295568344378088], "#ff7a4d": [1.0, 0.1946178304415758, 0.07421356838014963], "#ff4d9e": [1.0, 0.07421356838014963, 0.3419144249086609], "#ff3653": [1.0, 0.03688945040110004, 0.08650046203654976], "#b6ffc9": [0.467783796112159, 1.0, 0.5840784178911641]};
+  /* ================== V18 GLB LOADER ==================
+     Minimal glTF-binary reader for the room's custom engine: parses the
+     JSON + BIN chunks, decodes EXT_meshopt_compression buffer views via
+     the inlined MeshoptDecoder, dequantizes KHR_mesh_quantization
+     accessors, and interleaves POSITION/NORMAL/TEXCOORD_0 into the
+     engine's stride-32 format. Textures upload with mipmaps (playbook
+     #1) — NPOT images are resampled onto a power-of-two canvas first.
+     No per-frame work happens here; everything bakes at load. */
+  function glbIsPOT(w,h){return (w&(w-1))===0&&(h&(h-1))===0}
+  function glbTexFromImage(img,mip){
+    var w=img.width,h=img.height,src=img;
+    if(!glbIsPOT(w,h)){
+      var pw=1,ph=1;while(pw<w)pw*=2;while(ph<h)ph*=2;
+      if(pw>2048)pw=2048;if(ph>2048)ph=2048;
+      var cv=document.createElement('canvas');cv.width=pw;cv.height=ph;
+      cv.getContext('2d').drawImage(img,0,0,pw,ph);src=cv;
+    }
+    var t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,mip===false?gl.LINEAR:gl.LINEAR_MIPMAP_LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    if(mip!==false){try{gl.generateMipmap(gl.TEXTURE_2D)}catch(mipErr){gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR)}}
+    return t;
+  }
+  function glbLoadImage(j,imgDef,baseUrl){
+    return new Promise(function(res,rej){
+      var im=new Image();
+      im.onload=function(){res(im)};
+      im.onerror=function(){rej(new Error('img load failed'))};
+      if(imgDef.uri){
+        im.crossOrigin='anonymous';
+        im.src=new URL(imgDef.uri,baseUrl).href;
+      }else{
+        var bv=j.bufferViews[imgDef.bufferView];
+        var bytes=new Uint8Array(j._bin,bv.byteOffset||0,bv.byteLength);
+        var blob=new Blob([bytes],{type:imgDef.mimeType||'image/png'});
+        im.src=URL.createObjectURL(blob);
+      }
+    });
+  }
+  async function glbParse(url){
+    var resp=await fetch(url);
+    if(!resp.ok)throw new Error('GLB fetch '+resp.status+' '+url);
+    var buf=await resp.arrayBuffer();
+    var dv=new DataView(buf);
+    if(dv.getUint32(0,true)!==0x46546C67)throw new Error('not a GLB: '+url);
+    var jlen=dv.getUint32(12,true);
+    var j=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,20,jlen)));
+    var binOff=20+jlen+8;
+    j._bin=buf.slice(binOff);
+    j._url=url;
+    /* meshopt: decode every compressed buffer view up front */
+    var used=j.extensionsUsed||[];
+    if(used.indexOf('EXT_meshopt_compression')>=0){
+      if(typeof MeshoptDecoder==='undefined')throw new Error('MeshoptDecoder missing');
+      await MeshoptDecoder.ready;
+      for(var bi=0;bi<(j.bufferViews||[]).length;bi++){
+        var bv=j.bufferViews[bi];
+        var ext=bv.extensions&&bv.extensions.EXT_meshopt_compression;
+        if(!ext)continue;
+        var srcBuf=j.buffers[ext.buffer];
+        var srcBytes=new Uint8Array(j._bin,ext.byteOffset||0,ext.byteLength);
+        var dst=new Uint8Array(ext.count*ext.byteStride);
+        MeshoptDecoder.decodeGltfBuffer(dst,ext.count,ext.byteStride,srcBytes,ext.mode,ext.filter||'NONE');
+        bv._decoded=dst;
+        bv.byteOffset=0;
+      }
+    }
+    return j;
+  }
+  function glbAccessor(j,idx){
+    var a=j.accessors[idx];
+    var bv=j.bufferViews[a.bufferView];
+    var data,view;
+    if(bv._decoded){data=bv._decoded;view=new DataView(data.buffer,data.byteOffset,data.byteLength)}
+    else{data=new Uint8Array(j._bin);view=new DataView(j._bin)}
+    var off=(bv.byteOffset||0)+(a.byteOffset||0);
+    var ncomp={SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT4:16}[a.type];
+    var stride=bv.byteStride||0;
+    var ct=a.componentType,count=a.count,norm=!!a.normalized;
+    var compBytes={5120:1,5121:1,5122:2,5123:2,5125:4,5126:4}[ct];
+    if(!stride)stride=ncomp*compBytes;
+    var out=new Float32Array(count*ncomp);
+    var read;
+    switch(ct){
+      case 5126:read=function(o){return view.getFloat32(o,true)};break;
+      case 5125:read=function(o){return view.getUint32(o,true)};break;
+      case 5123:read=norm?function(o){return view.getUint16(o,true)/65535}:function(o){return view.getUint16(o,true)};break;
+      case 5122:read=norm?function(o){return Math.max(view.getInt16(o,true)/32767,-1)}:function(o){return view.getInt16(o,true)};break;
+      case 5121:read=norm?function(o){return view.getUint8(o)/255}:function(o){return view.getUint8(o)};break;
+      case 5120:read=norm?function(o){return Math.max(view.getInt8(o)/127,-1)}:function(o){return view.getInt8(o)};break;
+    }
+    var rawInts=(ct===5123||ct===5125||ct===5121||ct===5120)&&!norm;
+    var outI=rawInts?new Uint32Array(count*ncomp):out;
+    for(var i=0;i<count;i++){
+      var base=off+i*stride;
+      for(var c=0;c<ncomp;c++)outI[i*ncomp+c]=read(base+c*compBytes);
+    }
+    return{data:outI,count:count,ncomp:ncomp,rawInts:rawInts};
+  }
+  function glbIndexArray(j,idx){
+    var a=glbAccessor(j,idx);
+    return a.data;
+  }
+  /* Interleave one primitive into an engine geometry (stride 32). */
+  function glbMakeGeo(j,prim){
+    var pa=prim.attributes;
+    var pos=glbAccessor(j,pa.POSITION);
+    var nor=pa.NORMAL!=null?glbAccessor(j,pa.NORMAL):null;
+    var uv=pa.TEXCOORD_0!=null?glbAccessor(j,pa.TEXCOORD_0):null;
+    var n=pos.count;
+    var verts=new Float32Array(n*8);
+    for(var i=0;i<n;i++){
+      verts[i*8]=pos.data[i*3];verts[i*8+1]=pos.data[i*3+1];verts[i*8+2]=pos.data[i*3+2];
+      if(nor){verts[i*8+3]=nor.data[i*3];verts[i*8+4]=nor.data[i*3+1];verts[i*8+5]=nor.data[i*3+2]}
+      else{verts[i*8+3]=0;verts[i*8+4]=1;verts[i*8+5]=0}
+      if(uv){verts[i*8+6]=uv.data[i*2];verts[i*8+7]=uv.data[i*2+1]}
+    }
+    var mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9,mnz=1e9,mxz=-1e9;
+    for(var q=0;q<n;q++){
+      var vx=pos.data[q*3],vy=pos.data[q*3+1],vz=pos.data[q*3+2];
+      if(vx<mnx)mnx=vx;if(vx>mxx)mxx=vx;if(vy<mny)mny=vy;if(vy>mxy)mxy=vy;if(vz<mnz)mnz=vz;if(vz>mxz)mxz=vz;
+    }
+    var ext=Math.max(mxx-mnx,mxy-mny,mxz-mnz);
+    var idx;
+    if(prim.indices!=null)idx=glbIndexArray(j,prim.indices);
+    else{idx=new Uint32Array(n);for(var k=0;k<n;k++)idx[k]=k}
+    var vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+    var ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+    var use32=n>65535||idx instanceof Uint32Array&&(idx.length&&idx[idx.length-1]>65535);
+    var itype=gl.UNSIGNED_SHORT;
+    if(use32){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx instanceof Uint32Array?idx:new Uint32Array(idx),gl.STATIC_DRAW);itype=gl.UNSIGNED_INT}
+    else gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx instanceof Uint16Array?idx:new Uint16Array(idx),gl.STATIC_DRAW);
+    return{vb:vb,ib:ib,count:idx.length,it:itype,ext:ext,mn:[mnx,mny,mnz],mx:[mxx,mxy,mxz]};
+  }
+  function glbNodeLocal(n){
+    if(n.matrix)return new Float32Array(n.matrix);
+    var t=n.translation||[0,0,0],r=n.rotation||[0,0,0,1],s=n.scale||[1,1,1];
+    var x=r[0],y=r[1],z=r[2],w=r[3];
+    var x2=x+x,y2=y+y,z2=z+z,xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2,wx=w*x2,wy=w*y2,wz=w*z2;
+    return new Float32Array([
+      (1-(yy+zz))*s[0],(xy+wz)*s[0],(xz-wy)*s[0],0,
+      (xy-wz)*s[1],(1-(xx+zz))*s[1],(yz+wx)*s[1],0,
+      (xz+wy)*s[2],(yz-wx)*s[2],(1-(xx+yy))*s[2],0,
+      t[0],t[1],t[2],1]);
+  }
+  var GLB_ID=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+  /* Skinned "static" props (the bench vice has a jaw rig): bake each
+     vertex through its dominant joint's bind matrix (jointWorld x IBM)
+     so the mesh lands in scene space at bind pose. Quantization
+     compensation for skinned files lives in the IBMs (verified on the
+     deploy set), so this is also what makes their scale correct. */
+  function glbMakeGeoSkinned(j,prim,skinMats){
+    var pa=prim.attributes;
+    var pos=glbAccessor(j,pa.POSITION);
+    var nor=pa.NORMAL!=null?glbAccessor(j,pa.NORMAL):null;
+    var uv=pa.TEXCOORD_0!=null?glbAccessor(j,pa.TEXCOORD_0):null;
+    var jts=glbAccessor(j,pa.JOINTS_0),wts=pa.WEIGHTS_0!=null?glbAccessor(j,pa.WEIGHTS_0):null;
+    var n=pos.count,verts=new Float32Array(n*8);
+    var mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9,mnz=1e9,mxz=-1e9;
+    for(var i=0;i<n;i++){
+      var bj=0,bw=-1;
+      for(var k=0;k<4;k++){var wv=wts?wts.data[i*4+k]:(k===0?1:0);if(wv>bw){bw=wv;bj=jts.data[i*4+k]}}
+      var m=skinMats[bj]||GLB_ID;
+      var x=pos.data[i*3],y=pos.data[i*3+1],z=pos.data[i*3+2];
+      var wx=m[0]*x+m[4]*y+m[8]*z+m[12],wy=m[1]*x+m[5]*y+m[9]*z+m[13],wz=m[2]*x+m[6]*y+m[10]*z+m[14];
+      verts[i*8]=wx;verts[i*8+1]=wy;verts[i*8+2]=wz;
+      if(wx<mnx)mnx=wx;if(wx>mxx)mxx=wx;if(wy<mny)mny=wy;if(wy>mxy)mxy=wy;if(wz<mnz)mnz=wz;if(wz>mxz)mxz=wz;
+      if(nor){
+        var nx=nor.data[i*3],ny=nor.data[i*3+1],nz=nor.data[i*3+2];
+        var tx=m[0]*nx+m[4]*ny+m[8]*nz,ty=m[1]*nx+m[5]*ny+m[9]*nz,tz=m[2]*nx+m[6]*ny+m[10]*nz;
+        var tl=Math.hypot(tx,ty,tz)||1;
+        verts[i*8+3]=tx/tl;verts[i*8+4]=ty/tl;verts[i*8+5]=tz/tl;
+      }else{verts[i*8+3]=0;verts[i*8+4]=1;verts[i*8+5]=0}
+      if(uv){verts[i*8+6]=uv.data[i*2];verts[i*8+7]=uv.data[i*2+1]}
+    }
+    var idx;
+    if(prim.indices!=null)idx=glbIndexArray(j,prim.indices);
+    else{idx=new Uint32Array(n);for(var k2=0;k2<n;k2++)idx[k2]=k2}
+    var vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
+    var ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+    var use32=false;for(var q=0;q<idx.length;q++)if(idx[q]>65535){use32=true;break}
+    var itype=gl.UNSIGNED_SHORT;
+    if(use32){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx instanceof Uint32Array?idx:new Uint32Array(idx),gl.STATIC_DRAW);itype=gl.UNSIGNED_INT}
+    else gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx instanceof Uint16Array?idx:new Uint16Array(idx),gl.STATIC_DRAW);
+    return{geo:{vb:vb,ib:ib,count:idx.length,it:itype},ext:Math.max(mxx-mnx,mxy-mny,mxz-mnz),mn:[mnx,mny,mnz],mx:[mxx,mxy,mxz]};
+  }
+  /* Load a static model: returns {items:[{geo,mat,world,name}]} with node
+     worlds baked. placements (optional) = list of world matrices applied
+     on top — one item set per placement (geometry buffers shared). */
+  async function glbLoadStatic(url,placements){
+    var j=await glbParse(url);
+    var texes=[];
+    for(var ii=0;ii<(j.images||[]).length;ii++){
+      try{var im=await glbLoadImage(j,j.images[ii],url);texes[ii]=glbTexFromImage(im,true)}
+      catch(imgErr){texes[ii]=null}
+    }
+    var mats=(j.materials||[]).map(function(m){
+      var pbr=m.pbrMetallicRoughness||{};
+      var col=pbr.baseColorFactor||[1,1,1,1];
+      var tex=null;
+      if(pbr.baseColorTexture)tex=texes[j.textures[pbr.baseColorTexture.index].source]||null;
+      var em=m.emissiveFactor||[0,0,0];
+      var glow=(em[0]+em[1]+em[2])>0.02?0.85:0;
+      return{color:[col[0],col[1],col[2]],tex:tex,alpha:col[3]!=null?col[3]:1,
+             spec:m.metallicFactor!=null?0.3+m.metallicFactor*0.5:0.35,glow:glow,
+             ds:!!m.doubleSided,emissive:em};
+    });
+    if(!mats.length)mats=[{color:[0.8,0.8,0.8],tex:null,alpha:1,spec:0.3,glow:0}];
+    var worlds={};
+    var parents={};
+    (j.nodes||[]).forEach(function(n,ni){(n.children||[]).forEach(function(c){parents[c]=ni})});
+    function nodeWorld(ni){
+      if(worlds[ni])return worlds[ni];
+      var local=glbNodeLocal(j.nodes[ni]);
+      var w=parents[ni]!=null?mul(nodeWorld(parents[ni]),local):local;
+      worlds[ni]=w;return w;
+    }
+    /* skins: joint world x IBM per skin, for bind-pose baking */
+    var skinMatsBySkin=(j.skins||[]).map(function(sk){
+      var ibmAcc=glbAccessor(j,sk.inverseBindMatrices);
+      return sk.joints.map(function(jn,b){
+        var ibm=new Float32Array(ibmAcc.data.buffer,ibmAcc.data.byteOffset+b*64,16).slice();
+        return mul(nodeWorld(jn),ibm);
+      });
+    });
+    var baseItems=[];
+    (j.nodes||[]).forEach(function(n,ni){
+      if(n.mesh==null)return;
+      var mesh=j.meshes[n.mesh];
+      var w=nodeWorld(ni);
+      var wScale=Math.max(Math.hypot(w[0],w[1],w[2]),Math.hypot(w[4],w[5],w[6]),Math.hypot(w[8],w[9],w[10]))||1;
+      mesh.primitives.forEach(function(prim){
+        if(n.skin!=null&&skinMatsBySkin[n.skin]&&prim.attributes.JOINTS_0!=null){
+          var bg=glbMakeGeoSkinned(j,prim,skinMatsBySkin[n.skin]);
+          baseItems.push({geo:bg.geo,mat:mats[prim.material||0],world:GLB_ID,name:n.name||'',ext:bg.ext,mn:bg.mn,mx:bg.mx});
+        }else{
+          var g2=glbMakeGeo(j,prim);
+          baseItems.push({geo:g2,mat:mats[prim.material||0],world:w,name:n.name||'',ext:g2.ext*wScale,mn:g2.mn,mx:g2.mx});
+        }
+      });
+    });
+    var items=[];
+    var pl=placements&&placements.length?placements:[null];
+    pl.forEach(function(pm){
+      baseItems.forEach(function(it){
+        items.push({geo:it.geo,mat:it.mat,world:pm?mul(pm,it.world):it.world,name:it.name,ext:it.ext,mn:it.mn,mx:it.mx});
+      });
+    });
+    return{items:items,json:j};
+  }
+  function drawGLBItems(pv,items,hero,rim){
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      it.mat.hero=hero;it.mat.rim=rim;
+      if(it.mat.ds)gl.disable(gl.CULL_FACE);
+      drawGeo(pv,it.geo,it.world,it.mat.color,it.mat);
+      if(it.mat.ds)gl.enable(gl.CULL_FACE);
+    }
+  }
+
+  /* ================== V18 GEO HELPERS ==================
+     Small shared geometry for the bay/props/lighting blocks, all in the
+     engine's stride-32 interleaved format. Flat quads, discs, rings,
+     cylinders, textured plates and camera-facing sprites. */
+  function geoFromArrays(verts,idx){
+    var vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(verts),gl.STATIC_DRAW);
+    var ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+    return{vb:vb,ib:ib,count:idx.length,it:gl.UNSIGNED_SHORT};
+  }
+  var _quadGeo=null,_discGeo=null,_ringGeo=null,_cylGeo=null,_cylInGeo=null;
+  var ID4=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+  /* short aliases over V17's mat* helpers (V18 blocks use these) */
+  function T(x,y,z){return matT(x,y,z)}
+  function scl(x,y,z){return matS(x,y,z)}
+  function rotX(a){return matRX(a)}
+  function rotY(a){return matRY(a)}
+  function rotZ(a){return matRZ(a)}
+  /* axis box: base at yBase, centered x/z, optional yaw — via V17's
+     drawPoseBox (pose matrix carries translation+rotation only) */
+  function drawBox(pv,x,yBase,z,sx,sy,sz,color,yaw,mat){
+    var m=mul(T(x,yBase+sy/2,z),yaw?rotY(yaw):ID4);
+    drawPoseBox(pv,m,sx,sy,sz,color,mat||MATS.metal);
+  }
+  function quadGeo(){
+    if(_quadGeo)return _quadGeo;
+    _quadGeo=geoFromArrays([
+      -0.5,0,-0.5, 0,1,0, 0,1,  0.5,0,-0.5, 0,1,0, 1,1,
+      0.5,0,0.5, 0,1,0, 1,0,  -0.5,0,0.5, 0,1,0, 0,0],[0,2,1,0,3,2]);
+    return _quadGeo;
+  }
+  function discGeo(){
+    if(_discGeo)return _discGeo;
+    var v=[],ix=[],SEG=28;
+    v.push(0,0,0, 0,1,0, 0.5,0.5);
+    for(var i=0;i<=SEG;i++){var a=i/SEG*Math.PI*2;v.push(Math.cos(a),0,Math.sin(a), 0,1,0, 0.5+Math.cos(a)*0.5,0.5+Math.sin(a)*0.5)}
+    for(var k=1;k<=SEG;k++)ix.push(0,k,k+1);
+    _discGeo=geoFromArrays(v,ix);return _discGeo;
+  }
+  function ringGeo(){
+    if(_ringGeo)return _ringGeo;
+    var v=[],ix=[],SEG=36;
+    for(var i=0;i<=SEG;i++){
+      var a=i/SEG*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
+      v.push(c*0.82,0,s*0.82, 0,1,0, 0,0,  c,0,s, 0,1,0, 1,0);
+    }
+    for(var k=0;k<SEG;k++){var b=k*2;ix.push(b,b+1,b+2, b+1,b+3,b+2)}
+    _ringGeo=geoFromArrays(v,ix);return _ringGeo;
+  }
+  function cylGeo(inside){
+    if(inside&&_cylInGeo)return _cylInGeo;
+    if(!inside&&_cylGeo)return _cylGeo;
+    var v=[],ix=[],SEG=24;
+    for(var i=0;i<=SEG;i++){
+      var a=i/SEG*Math.PI*2,c=Math.cos(a),s=Math.sin(a),sgn=inside?-1:1;
+      v.push(c,0,s, c*sgn,0,s*sgn, i/SEG,0,  c,1,s, c*sgn,0,s*sgn, i/SEG,1);
+    }
+    for(var k=0;k<SEG;k++){var b=k*2;if(inside)ix.push(b,b+2,b+1, b+1,b+2,b+3);else ix.push(b,b+1,b+2, b+1,b+3,b+2)}
+    var g=geoFromArrays(v,ix);
+    if(inside)_cylInGeo=g;else _cylGeo=g;
+    return g;
+  }
+  function drawDisc(pv,x,y,z,r,color,seg){
+    drawGeo(pv,discGeo(),mul(T(x,y,z),scl(r,1,r)),color,{tex:null,alpha:1,spec:0.25,glow:0});
+  }
+  function drawRingFlat(pv,x,y,z,rIn,rOut,color){
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    drawGeo(pv,ringGeo(),mul(T(x,y,z),scl(rOut,1,rOut)),[color[0],color[1],color[2]],{tex:null,alpha:color[3]!=null?color[3]:1,spec:0,glow:0.9});
+    gl.depthMask(true);gl.disable(gl.BLEND);
+  }
+  function drawCylinder(pv,x,yBase,z,r,h,color,seg){
+    drawGeo(pv,cylGeo(false),mul(T(x,yBase,z),scl(r,h,r)),color,{tex:null,alpha:1,spec:0.35,glow:0});
+    drawDisc(pv,x,yBase+h,z,r,color,seg);
+  }
+  /* translucent glow disc (RGBA color), depth-write off */
+  function drawDiscFlat(pv,x,y,z,r,color){
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    drawGeo(pv,discGeo(),mul(T(x,y,z),scl(r,1,r)),[color[0],color[1],color[2]],{tex:null,alpha:color[3]!=null?color[3]:1,spec:0,glow:0.9});
+    gl.depthMask(true);gl.disable(gl.BLEND);
+  }
+  function drawCylinderIn(pv,x,yBase,z,r,h,color,seg){
+    drawGeo(pv,cylGeo(true),mul(T(x,yBase,z),scl(r,h,r)),color,{tex:null,alpha:1,spec:0.15,glow:0});
+  }
+  function drawAOBlob(pv,x,y,z,r,strength){
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    drawGeo(pv,discGeo(),mul(T(x,y,z),scl(r,1,r)),[0.02,0.02,0.03],{tex:null,alpha:strength,spec:0,glow:0});
+    gl.depthMask(true);gl.disable(gl.BLEND);
+  }
+  var _plateGeo=null;
+  function plateGeo(){
+    if(_plateGeo)return _plateGeo;
+    _plateGeo=geoFromArrays([
+      -0.5,-0.5,0, 0,0,1, 0,1,  0.5,-0.5,0, 0,0,1, 1,1,
+      0.5,0.5,0, 0,0,1, 1,0,  -0.5,0.5,0, 0,0,1, 0,0],[0,1,2,0,2,3]);
+    return _plateGeo;
+  }
+  function drawPlateQuad(pv,world,w,h,tex,backColor){
+    if(backColor)drawGeo(pv,plateGeo(),mul(world,scl(w*1.05,h*1.05,1)),backColor,{tex:null,alpha:1,spec:0.3,glow:0});
+    if(tex)drawGeo(pv,plateGeo(),mul(world,scl(w,h,1)),[1,1,1],{tex:tex,alpha:1,spec:0.15,glow:0.35});
+  }
+  function drawPlateQuadH(pv,world,w,h,tex){
+    /* flat on floor: rotate plate geo to lie in XZ */
+    var w2=mul(world,mul(rotX(-Math.PI/2),scl(w,h,1)));
+    if(tex)drawGeo(pv,plateGeo(),w2,[1,1,1],{tex:tex,alpha:1,spec:0.1,glow:0.15});
+  }
+  function drawTexQuadFlat(pv,x,y,z,size,tex,color){
+    drawGeo(pv,quadGeo(),mul(T(x,y,z),scl(size,1,size)),[color[0],color[1],color[2]],{tex:tex,alpha:color[3],spec:0,glow:0});
+  }
+  var _sprM=new Float32Array(16);
+  function drawSprite(pv,x,y,z,w,h,tex,color){
+    /* camera-facing quad on the shared plate geometry: basis columns
+       come from the inverse view rotation — no buffer churn per call */
+    var vw=_pvCur;if(!vw)return;
+    var rx=vw[0],ry=vw[4],rz=vw[8],ux=vw[1],uy=vw[5],uz=vw[9];
+    var fx=uy*rz-uz*ry,fy=uz*rx-ux*rz,fz=ux*ry-uy*rx;
+    var m=_sprM;
+    m[0]=rx*w;m[1]=ry*w;m[2]=rz*w;m[3]=0;
+    m[4]=ux*h;m[5]=uy*h;m[6]=uz*h;m[7]=0;
+    m[8]=fx;m[9]=fy;m[10]=fz;m[11]=0;
+    m[12]=x;m[13]=y;m[14]=z;m[15]=1;
+    drawGeo(pv,plateGeo(),m,[color[0],color[1],color[2]],{tex:tex,alpha:color[3]!=null?color[3]:1,spec:0,glow:1});
+  }
+  var _pvCur=null;
+
+  /* ================== V18 LIGHTING KIT ==================
+     Presets from lighting-kit/presets.json. EVENING is the room-start
+     default (reproduces the reference render's mood); hangar open
+     crossfades to SHOW (~1200 ms in / 1600 ms out); Trans-Am = SHOW
+     variant with RED POOL TINTS + emissive boost, NOT red relighting.
+     Grade lives in the fragment shader (playbook #2); fog is the
+     whisper grade (playbook #3). Everything crossfades, never snaps. */
+  var LIGHT={"presets": {"evening": {"hemiSky": [0.18, 0.239, 0.361], "hemiGnd": [0.102, 0.071, 0.047], "hemiInt": 0.45, "keyColor": [1.0, 0.69, 0.4], "keyInt": 1.15, "keyDir": [-0.6247, 0.3584, 0.6938], "sunPool": 0.38, "ambient": 0.14, "fogColor": [0.075, 0.102, 0.157], "grade": {"warmth": 0.15, "sat": 1.08, "vig": 0.3, "sunnyHero": 0.9, "sunnyRim": 0.42, "fogDensity": 0.016, "fogColor": [0.075, 0.102, 0.157], "poolTint": [1.0, 0.94, 0.84], "sunPool": 0.38}}, "show": {"hemiSky": [0.102, 0.129, 0.188], "hemiGnd": [0.027, 0.027, 0.043], "hemiInt": 0.18, "keyColor": [0.843, 0.871, 1.0], "keyInt": 0.5, "keyDir": [0.1215, 0.8829, -0.4535], "sunPool": 0.85, "ambient": 0.05, "fogColor": [0.035, 0.043, 0.067], "grade": {"warmth": 0.05, "sat": 1.15, "vig": 0.3, "sunnyHero": 1.15, "sunnyRim": 0.6, "fogDensity": 0.02, "fogColor": [0.035, 0.043, 0.067], "poolTint": [0.9, 0.95, 1.0], "sunPool": 0.85}, "ta": {"hemiSky": [0.102, 0.129, 0.188], "hemiGnd": [0.027, 0.027, 0.043], "hemiInt": 0.18, "keyColor": [1.0, 0.6938717612919899, 0.6938717612919899], "keyInt": 0.6, "keyDir": [0.1215, 0.8829, -0.4535], "sunPool": 0.85, "ambient": 0.05, "fogColor": [0.078, 0.031, 0.031], "grade": {"warmth": 0.05, "sat": 1.15, "vig": 0.3, "sunnyHero": 1.5, "sunnyRim": 0.85, "fogDensity": 0.02, "fogColor": [0.078, 0.031, 0.031], "poolTint": [1.0, 0.0295568344378088, 0.0295568344378088], "sunPool": 0.85}}}, "day": {"hemiSky": [0.737, 0.831, 0.961], "hemiGnd": [0.341, 0.314, 0.247], "hemiInt": 0.85, "keyColor": [1.0, 0.945, 0.863], "keyInt": 1.35, "keyDir": [0.329, 0.8192, 0.4698], "sunPool": 0.15, "ambient": 0.3, "fogColor": [0.557, 0.604, 0.659], "grade": {"warmth": 0.0, "sat": 0.95, "vig": 0.3, "sunnyHero": 0.55, "sunnyRim": 0.25, "fogDensity": 0.0075, "fogColor": [0.557, 0.604, 0.659], "poolTint": [1.0, 0.97, 0.92], "sunPool": 0.15}}}};
+  var lightCur=null,poolTex=null,sheenTex=null,domeTex=null;
+  var spriteTex={dot:null,glow:null};
+  function lightTarget(){
+    if(transAm)return LIGHT.presets.show.ta;
+    if(hangarState==='opening'||hangarState==='open')return LIGHT.presets.show;
+    return LIGHT.presets.evening;
+  }
+  function lightInit(){
+    lightCur=JSON.parse(JSON.stringify(LIGHT.presets.evening));
+    LIGHT.g=JSON.parse(JSON.stringify(LIGHT.presets.evening.grade));
+  }
+  function lightUpdate(dt){
+    if(!lightCur)lightInit();
+    var tgt=lightTarget();
+    var inShow=(hangarState==='opening'||hangarState==='open'||transAm);
+    var rate=dt/(inShow?1.2:1.6);
+    var k=Math.min(1,rate*2.2);
+    function lp(a,b){return a+(b-a)*k}
+    function lp3(a,b){return[lp(a[0],b[0]),lp(a[1],b[1]),lp(a[2],b[2])]}
+    lightCur.hemiSky=lp3(lightCur.hemiSky,tgt.hemiSky);
+    lightCur.hemiGnd=lp3(lightCur.hemiGnd,tgt.hemiGnd);
+    lightCur.hemiInt=lp(lightCur.hemiInt,tgt.hemiInt);
+    lightCur.keyColor=lp3(lightCur.keyColor,tgt.keyColor);
+    lightCur.keyInt=lp(lightCur.keyInt,tgt.keyInt);
+    lightCur.keyDir=lp3(lightCur.keyDir,tgt.keyDir);
+    lightCur.sunPool=lp(lightCur.sunPool,tgt.sunPool);
+    lightCur.ambient=lp(lightCur.ambient,tgt.ambient);
+    var g=LIGHT.g,tg=tgt.grade;
+    g.warmth=lp(g.warmth,tg.warmth);g.sat=lp(g.sat,tg.sat);g.vig=lp(g.vig,tg.vig);
+    g.sunnyHero=lp(g.sunnyHero,tg.sunnyHero);g.sunnyRim=lp(g.sunnyRim,tg.sunnyRim);
+    g.fogDensity=lp(g.fogDensity||0.013,tg.fogDensity||0.013);
+    g.fogColor=lp3(g.fogColor||[0.07,0.09,0.14],tg.fogColor||[0.07,0.09,0.14]);
+    g.poolTint=lp3(g.poolTint||[1,0.94,0.86],tg.poolTint||[1,0.94,0.86]);
+    /* push into shader uniforms via globals read by drawGeo */
+    uLight.dir=lightCur.keyDir;uLight.keyColor=lightCur.keyColor;uLight.keyInt=lightCur.keyInt;
+    uLight.hemiSky=lightCur.hemiSky;uLight.hemiGnd=lightCur.hemiGnd;uLight.hemiInt=lightCur.hemiInt;
+    uLight.ambient=lightCur.ambient;
+    uLight.warmth=g.warmth;uLight.sat=g.sat;uLight.vig=g.vig;uLight.fog=g.fogDensity;
+    uLight.fogColor=g.fogColor;
+  }
+  var uLight={dir:[0.35,0.78,0.45],keyColor:[1,0.9,0.78],keyInt:0.92,
+    hemiSky:[0.36,0.42,0.55],hemiGnd:[0.23,0.18,0.13],hemiInt:0.62,ambient:0.16,
+    warmth:0.75,sat:1.07,vig:0.30,fog:0.013,fogColor:[0.07,0.09,0.14]};
+  function loadLightingAssets(){
+    function li(src,cb){var im=new Image();im.onload=function(){cb(glbTexFromImage(im,true))};im.onerror=function(){};im.src=src}
+    li('assets/light-pool-decal.png',function(t){poolTex=t});
+    li('assets/floor-sheen-overlay.png',function(t){sheenTex=t});
+    li('assets/sky-evening-dome.png',function(t){domeTex=t});
+    li('assets/gn-particle-dot.png',function(t){spriteTex.dot=t});
+    li('assets/thruster-glow-cone.png',function(t){spriteTex.glow=t});
+  }
+  function drawPoolDecal(pv,x,z,size,strength){
+    if(!poolTex||strength<0.02)return;
+    var pt=(typeof LIGHT!=='undefined'&&LIGHT.g&&LIGHT.g.poolTint)||[1,0.96,0.88];
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    drawTexQuadFlat(pv,x,0.016,z,size,poolTex,[pt[0],pt[1],pt[2],strength]);
+    gl.depthMask(true);gl.disable(gl.BLEND);
+  }
+  function drawSheen(pv){
+    if(!sheenTex)return;
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    drawTexQuadFlat(pv,0,0.008,0,17,sheenTex,[1,1,1,0.16]);
+    gl.depthMask(true);gl.disable(gl.BLEND);
+  }
+  /* Trans-Am GN particle motes + hover thruster glow: fake bloom via
+     sprites (playbook: no post chain on this stack). */
+  var gnParts=[];
+  function drawAtmosphereFX(pv){
+    if(spriteTex.dot&&(transAm||hoverAmt>0.05)){
+      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+      gl.depthMask(false);
+      var n=transAm?26:10;
+      for(var i=0;i<n;i++){
+        var seed=i*2.39996,rr=0.5+((i*37)%10)/10*0.9;
+        var px=sunny.x+Math.cos(seed+envT*0.00035)*rr;
+        var pz=sunny.z+Math.sin(seed+envT*0.00035)*rr;
+        var py=0.25+((envT*0.00022+i*0.173)%1.5);
+        var a=transAm?0.5:0.3;
+        drawSprite(pv,px,py,pz,0.055,0.055,spriteTex.dot,transAm?[1,0.45,0.5,a]:[0.55,1,0.6,a]);
+      }
+      gl.depthMask(true);gl.disable(gl.BLEND);
+    }
+    if(spriteTex.glow&&hoverAmt>0.05){
+      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+      gl.depthMask(false);
+      var fl=0.85+0.15*Math.sin(envT*0.031);
+      drawSprite(pv,sunny.x-Math.sin(sunny.yaw)*0.05,(0.4*hoverAmt)-0.06,sunny.z-Math.cos(sunny.yaw)*0.05,0.55*fl,0.7*fl,spriteTex.glow,[0.6,1,0.7,0.5*hoverAmt]);
+      gl.depthMask(true);gl.disable(gl.BLEND);
+    }
+  }
+
+  /* ================== V18 SFX (CC0 pack) ==================
+     Chains per sfx/README: reveal = blip -> hydraulics -> hum while
+     rising -> lock clunk; Trans-Am = charge -> hum loop; footsteps
+     positional at her feet while the walk cycle runs; ui-confirm on
+     panel acks; ambient bed always-on at low volume. Audio starts ONLY
+     after a user gesture / XR session start (autoplay rules) — buffers
+     decode lazily into an AudioContext created on first unlock. */
+  var SFX_FILES={
+    ambient:'assets/sfx/ambient-hangar-loop.ogg',
+    uiBlip:'assets/sfx/ui-blip.ogg',
+    uiConfirm:'assets/sfx/ui-confirm.ogg',
+    revealA:'assets/sfx/reveal-hydraulic-a.ogg',
+    revealB:'assets/sfx/reveal-hydraulic-b.ogg',
+    platformHum:'assets/sfx/platform-hum-loop.ogg',
+    platformLock:'assets/sfx/platform-lock-clunk.ogg',
+    taCharge:'assets/sfx/transam-charge.ogg',
+    taHum:'assets/sfx/transam-hum-loop.ogg',
+    steps:'assets/sfx/footsteps-metal-loop.ogg'
+  };
+  var AC=null,sfxBuf={},sfxMaster=null,ambSrc=null,humSrc=null,humGain=null,taHumSrc=null,stepSrc=null,stepPan=null,stepGain=null,sfxUnlocked=false;
+  function audioUnlock(){
+    if(sfxUnlocked)return;
+    try{
+      AC=new (window.AudioContext||window.webkitAudioContext)();
+      sfxMaster=AC.createGain();sfxMaster.gain.value=0.9;sfxMaster.connect(AC.destination);
+      sfxUnlocked=true;
+      Object.keys(SFX_FILES).forEach(function(k){
+        fetch(SFX_FILES[k]).then(function(r){return r.arrayBuffer()}).then(function(ab){
+          AC.decodeAudioData(ab,function(buf){sfxBuf[k]=buf;if(k==='ambient')audioStartAmbient()},function(){});
+        }).catch(function(){});
+      });
+    }catch(e){/* audio is garnish — never break the room */}
+  }
+  function audioPlay(key,vol,when){
+    if(!AC||!sfxBuf[key])return;
+    try{
+      var src=AC.createBufferSource();src.buffer=sfxBuf[key];
+      var g=AC.createGain();g.gain.value=vol||0.7;
+      src.connect(g);g.connect(sfxMaster);
+      src.start(AC.currentTime+(when||0));
+    }catch(e){}
+  }
+  function audioLoopStart(key,vol){
+    if(!AC||!sfxBuf[key])return null;
+    try{
+      var src=AC.createBufferSource();src.buffer=sfxBuf[key];src.loop=true;
+      var g=AC.createGain();g.gain.value=vol||0.5;
+      src.connect(g);g.connect(sfxMaster);src.start();
+      return{src:src,gain:g};
+    }catch(e){return null}
+  }
+  function audioLoopStop(h){if(h){try{h.src.stop()}catch(e){} }}
+  function audioStartAmbient(){
+    if(ambSrc||!sfxBuf.ambient)return;
+    ambSrc=audioLoopStart('ambient',0.16);
+  }
+  function audioRevealStart(){
+    audioUnlock();
+    audioPlay('uiBlip',0.8);
+    audioPlay('revealA',0.7,0.08);
+    audioPlay('revealB',0.6,0.55);
+  }
+  function audioHumSet(on){
+    if(on&&!humSrc)humSrc=audioLoopStart('platformHum',0.4);
+    if(!on&&humSrc){audioLoopStop(humSrc);humSrc=null}
+  }
+  function audioTransAmSet(on){
+    if(on){audioPlay('taCharge',0.8);if(!taHumSrc)taHumSrc=audioLoopStart('taHum',0.30)}
+    else if(taHumSrc){audioLoopStop(taHumSrc);taHumSrc=null}
+  }
+  function audioStepsUpdate(){
+    var walking=sunny.moving===true&&AC;
+    if(walking&&!stepSrc){
+      stepSrc=audioLoopStart('steps',0.0);
+      if(stepSrc){stepGain=stepSrc.gain}
+    }
+    if(stepSrc&&stepGain){
+      var d=Math.hypot(sunny.x-camPos[0],sunny.z-camPos[2]);
+      var v=Math.max(0,0.5-d*0.045)*(0.7+0.3*Math.sin(sunny.phase));
+      stepGain.gain.value=walking?v:0;
+      if(!walking){audioLoopStop(stepSrc);stepSrc=null;stepGain=null}
+    }
+  }
+
+  /* ================== V18 SUNNY'S HANGAR BAY ==================
+     Stark reveal at the FRONT-RIGHT of the room: pit center (5.9, 5.9),
+     Ø4.60 m pit 1.70 m deep, Ø4.20 m rising platform, 4 sliding quadrant
+     lid panels (12 mm seams), cyan ring at rest, statues on Ø1.60 m
+     pedestals around the platform, name plates at reading height, the
+     gold BAY 01 — SUNNY plate for Exia herself. State machine advances
+     from updateSunny (QA requirement), never only from the XR callback.
+     Resting state = museum-clean; theatrics fire only while opening. */
+  var hangarState='closed',hangarProgress=0;
+  var BAY={x:5.9,z:5.9,pitR:2.30,platR:2.10,depth:1.70,lidY:0.0};
+  var METAL_DARK=[0.16,0.17,0.19],MATTE_DARK=[0.10,0.105,0.12];
+  var statuesReady=false,statueItems=[],statueGroups={};
+  var bayPlateTex=null,baySignTex=null,plateTexByKey={};
+  var hangarMoving=false;
+  function setHangar(open,src){
+    if(open){
+      if(hangarState==='open'||hangarState==='opening')return;
+      hangarState='opening';hangarMoving=true;
+      loadStatues();
+      audioRevealStart();
+      logEvent('state','hangar opening'+(src?' ('+src+')':''),'hangar');
+    }else{
+      if(hangarState==='closed'||hangarState==='closing')return;
+      hangarState='closing';hangarMoving=true;
+      audioPlay('revealHydraulicB',0.5);
+      logEvent('state','hangar closing'+(src?' ('+src+')':''),'hangar');
+    }
+  }
+  function updateHangar(dt){
+    if(hangarState==='opening'){
+      hangarProgress=Math.min(1,hangarProgress+dt/6.5);
+      audioHumSet(hangarProgress>0.25&&hangarProgress<0.98);
+      if(hangarProgress>=1){hangarState='open';hangarMoving=false;audioHumSet(false);audioPlay('platformLock',0.8);logEvent('state','hangar open','hangar')}
+    }else if(hangarState==='closing'){
+      hangarProgress=Math.max(0,hangarProgress- dt/5.5);
+      audioHumSet(hangarProgress>0.02&&hangarProgress<0.75);
+      if(hangarProgress<=0){hangarState='closed';hangarMoving=false;audioHumSet(false);audioPlay('platformLock',0.6);logEvent('state','hangar closed','hangar')}
+    }
+    /* lighting crossfade targets follow the bay */
+    var showT=(hangarState==='opening'||hangarState==='open')?1:0;
+    LIGHT.showTarget=showT;
+  }
+  function bayPlatformY(){return -BAY.depth*(1-easeInOut(hangarProgress))}
+  function easeInOut(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2}
+  /* STATUES FINAL (parent steer, Oct 16): all five suits cleared after
+     the repair round and load as INDIVIDUAL GLBs from
+     gundam-models/statues/ (compressed into deploy models/); the old
+     merged statues.glb stays out of the load path. RX-78 is a STATIC
+     bind-pose bake (source skinning was engine-proprietary; clips are
+     gone — do not wire RX animation). Mounts are pose-aware: Dynames +
+     RX-78 stand; Kyrios (mid-leap) floats on hover struts; Virtue is a
+     braced firing diorama flat on its pedestal; 00 Raiser (level sword
+     lunge, 1.39 m tall x 1.85 m long — fit by LENGTH) rides a clear
+     acrylic strut at the pelvis. Mounting is measured at runtime from
+     each model's real bounds, so re-exports drop in safely. */
+  var STATUE_SPOTS=[
+    {key:'Dynames',file:'models/dynames.glb',mount:'stand',fit:'height',x:2.35,z:5.90},
+    {key:'Virtue',file:'models/virtue.glb',mount:'brace',fit:'height',x:3.39,z:8.41},
+    {key:'RX78',file:'models/rx-78.glb',mount:'stand',fit:'height',x:4.12,z:8.97},
+    {key:'Kyrios',file:'models/kyrios.glb',mount:'hover',fit:'height',x:8.41,z:3.39},
+    {key:'Raiser',file:'models/00-raiser.glb',mount:'strut',fit:'length',x:9.45,z:5.90}
+  ];
+  var STATUE_LIFT={stand:0,hover:0.30,brace:0,strut:0.35};
+  function statueMeasure(items){
+    var mn=[1e9,1e9,1e9],mx=[-1e9,-1e9,-1e9];
+    items.forEach(function(it){
+      if(!it.mn||!it.mx)return;
+      for(var a=0;a<8;a++){
+        var cx=a&1?it.mx[0]:it.mn[0],cy=a&2?it.mx[1]:it.mn[1],cz=a&4?it.mx[2]:it.mn[2];
+        var w=it.world;
+        var x=w[0]*cx+w[4]*cy+w[8]*cz+w[12],y=w[1]*cx+w[5]*cy+w[9]*cz+w[13],z=w[2]*cx+w[6]*cy+w[10]*cz+w[14];
+        if(x<mn[0])mn[0]=x;if(y<mn[1])mn[1]=y;if(z<mn[2])mn[2]=z;
+        if(x>mx[0])mx[0]=x;if(y>mx[1])mx[1]=y;if(z>mx[2])mx[2]=z;
+      }
+    });
+    return{items:items,h:mx[1]-mn[1],len:Math.max(mx[0]-mn[0],mx[2]-mn[2]),cx:(mn[0]+mx[0])/2,cz:(mn[2]+mx[2])/2,fy:mn[1]};
+  }
+  async function loadStatues(){
+    if(statuesReady||loadStatues._busy)return;loadStatues._busy=true;
+    var jobs=STATUE_SPOTS.filter(function(sp){return !!sp.file}).map(async function(sp){
+      try{
+        var res=await glbLoadStatic(sp.file,null);
+        statueGroups[sp.key]=statueMeasure(res.items);
+        logEvent('state','statue loaded: '+sp.key+' ('+res.items.length+' meshes)','hangar');
+      }catch(e){logEvent('state','statue load failed '+sp.key+': '+e.message,'hangar')}
+    });
+    await Promise.all(jobs);
+    statuesReady=true;
+    loadStatues._busy=false;
+  }
+  function drawStatues(pv,platTopY){
+    for(var si=0;si<STATUE_SPOTS.length;si++){
+      var sp=STATUE_SPOTS[si],grp=statueGroups[sp.key];
+      /* pedestal + cyan ring ride the platform for EVERY spot —
+         held suits keep an empty, lit pedestal until repairs land */
+      drawCylinder(pv,sp.x,platTopY,sp.z,0.80,0.45,MATTE_DARK,24);
+      var ringPulse=hangarState==='open'?0.55:0.3;
+      drawRingFlat(pv,sp.x,platTopY+0.452,sp.z,0.62,0.80,transAm?[1,0.25,0.35,0.9]:[0.25,0.9,1,ringPulse]);
+      drawAOBlob(pv,sp.x,platTopY+0.455,sp.z,0.85,0.5);
+      if(!grp)continue;
+      var lift=STATUE_LIFT[sp.mount]||0;
+      var yaw=Math.atan2(-sp.x,-sp.z);
+      var s=(sp.fit==='length'?1.85/Math.max(grp.len,0.01):1.75/Math.max(grp.h,0.01));
+      var fixM=mul(T(sp.x,platTopY+0.45+lift,sp.z),mul(rotY(yaw),mul(scl(s,s,s),T(-grp.cx,-grp.fy,-grp.cz))));
+      for(var i=0;i<grp.items.length;i++){
+        var it=grp.items[i];
+        var w=mul(fixM,it.world);
+        it.mat.hero=0.72;it.mat.rim=0.3;
+        drawGeo(pv,it.geo,w,it.mat.color,it.mat);
+      }
+      if(sp.mount==='hover'){
+        /* two slim struts + under-glow sell the floating action pose */
+        var c=Math.cos(yaw),sn=Math.sin(yaw);
+        [-0.28,0.28].forEach(function(off){
+          var sx=sp.x+sn*off,sz=sp.z+c*off;
+          drawCylinder(pv,sx,platTopY+0.45,sz,0.022,lift,[0.35,0.37,0.4],8);
+        });
+        drawDiscFlat(pv,sp.x,platTopY+0.46,sp.z,0.55,[0.3,0.85,1,0.35]);
+      }
+      if(sp.mount==='strut'){
+        /* clear acrylic post at the pelvis + faint under-glow */
+        drawCylinder(pv,sp.x,platTopY+0.45,sp.z,0.035,lift,[0.75,0.82,0.9],10);
+        drawDiscFlat(pv,sp.x,platTopY+0.46,sp.z,0.5,[0.3,0.85,1,0.28]);
+      }
+    }
+  }
+  var plateDefs=[
+    {key:'exia',x:4.90,z:2.60,yaw:Math.PI*0.78},
+    {key:'dynames',x:1.55,z:5.02,yaw:Math.PI*0.5},
+    {key:'virtue',x:2.72,z:7.42,yaw:Math.PI*0.65},
+    {key:'rx78',x:3.60,z:8.20,yaw:Math.PI*0.72},
+    {key:'kyrios',x:7.42,z:2.72,yaw:Math.PI*0.35}
+  ];
+  function drawBayDressing(pv){
+    /* plates at reading height on slim stands, angled to the viewer lane */
+    for(var i=0;i<plateDefs.length;i++){
+      var pd=plateDefs[i],tex=plateTexByKey[pd.key];
+      drawBox(pv,pd.x,0,pd.z,0.05,1.06,0.05,METAL_DARK,pd.yaw);
+      if(tex){
+        var w=mul(T(pd.x,1.18,pd.z),mul(rotY(pd.yaw),mul(rotX(-0.32),T(0,0,0.045))));
+        drawPlateQuad(pv,w,0.62,0.40,tex);
+      }
+    }
+    /* hangar sign on the front-right wall run */
+    if(baySignTex){
+      var sw=mul(T(7.55,3.05,7.55),rotY(Math.PI*0.75));
+      drawPlateQuad(pv,sw,4.60,1.15,baySignTex);
+    }
+  }
+  function drawHangar(pv){
+    var p=hangarProgress,platY=bayPlatformY();
+    /* pit walls + floor (visible as the lid opens) */
+    if(p>0.001){
+      drawCylinderIn(pv,BAY.x,-BAY.depth,BAY.z,BAY.pitR,BAY.depth,[0.16,0.17,0.19],28);
+      drawDisc(pv,BAY.x,-BAY.depth,BAY.z,BAY.pitR,[0.13,0.14,0.16],28);
+      /* pit glow: light spill sells the reveal, fades as platform tops */
+      var glowA=(1-p)*0.75+0.12;
+      drawRingFlat(pv,BAY.x,-BAY.depth+0.02,BAY.z,1.80,BAY.pitR-0.05,transAm?[1,0.3,0.4,glowA]:[0.3,0.85,1,glowA]);
+    }
+    /* sliding quadrant lids: each panel slides radially outward */
+    var slide=p*1.55;
+    for(var q=0;q<4;q++){
+      var a=q*Math.PI/2+Math.PI/4;
+      var cx=BAY.x+Math.cos(a)*(1.16+slide),cz=BAY.z+Math.sin(a)*(1.16+slide);
+      drawBox(pv,cx,-0.055,cz,2.24,0.09,2.24,[0.30,0.31,0.34],-a+Math.PI/4);
+      drawBox(pv,cx,-0.006,cz,2.26,0.012,2.26,[0.36,0.37,0.40],-a+Math.PI/4);
+    }
+    /* hazard band at the pit rim */
+    if(bayHazardTex){
+      for(var s2=0;s2<4;s2++){
+        var a2=s2*Math.PI/2;
+        var hx=BAY.x+Math.cos(a2)*2.48,hz=BAY.z+Math.sin(a2)*2.48;
+        var hw=mul(T(hx,0.006,hz),rotY(-a2+Math.PI/2));
+        drawPlateQuadH(pv,hw,1.9,0.30,bayHazardTex);
+      }
+    }
+    /* rising platform */
+    drawCylinder(pv,BAY.x,platY-0.12,BAY.z,BAY.platR,0.12,[0.34,0.35,0.38],36);
+    drawCylinder(pv,BAY.x,platY-1.55,BAY.z,0.55,1.45,[0.22,0.23,0.26],16);
+    var ringC=transAm?[1,0.25,0.35]:[0.25,0.9,1];
+    var ringA=hangarState==='closed'?0.5:(hangarState==='open'?0.85:1.0);
+    drawRingFlat(pv,BAY.x,platY+0.005,BAY.z,1.62,1.80,[ringC[0],ringC[1],ringC[2],ringA]);
+    drawRingFlat(pv,BAY.x,platY+0.005,BAY.z,0.30,0.42,[ringC[0],ringC[1],ringC[2],ringA*0.8]);
+    if(p>0.02)drawStatues(pv,platY);
+    drawBayDressing(pv);
+    drawHangarConsole(pv);
+  }
+  var bayHazardTex=null;
+  /* ---------- the big physical button by the bay ---------- */
+  /* just outside the bay-approach wedge (azimuth < 30 deg), at the bay
+     entrance beside the gold Exia plate */
+  var hangarBtn={x:4.35,z:2.35,yaw:Math.PI*0.80,hoverT:0};
+  function drawHangarConsole(pv){
+    var b=hangarBtn;
+    drawBox(pv,b.x,0,b.z,0.52,1.02,0.30,METAL_DARK,b.yaw);
+    var tilt=mul(T(b.x,1.06,b.z),mul(rotY(b.yaw),rotX(-0.42)));
+    drawPlateQuad(pv,tilt,0.46,0.30,plateTexByKey.console||null,[0.10,0.11,0.13]);
+    var open=hangarState==='open'||hangarState==='opening';
+    var bc=open?[1,0.35,0.3]:[0.25,0.95,1];
+    var pulse=0.75+0.25*Math.sin(envT*0.0024);
+    drawCylinder(pv,b.x+Math.sin(b.yaw)*0.02,1.10,b.z+Math.cos(b.yaw)*0.02,0.085,0.05,[bc[0]*pulse,bc[1]*pulse,bc[2]*pulse],20);
+  }
+  function hangarButtonHit(cx,cy,cz){
+    return Math.hypot(cx-hangarBtn.x,cz-hangarBtn.z)<0.85&&cy>0.4&&cy<1.7;
+  }
+
+  /* ================== V18 PROPS (placement plan) ==================
+     Static GLB set dressing from deploy-assets, placed per
+     placement.json (29 placements / 42 instances). Loaded lazily after
+     the Exia so first paint stays fast; drawn as shared-geometry items
+     with a painted AO blob under each (playbook #4 — nothing floats).
+     The bay-approach wedge stays EMPTY by design (composition law). */
+  var PROP_PLACEMENTS=[{"file": "props/covered-car/covered_car_2k.glb", "x": -3.9, "y": 0, "z": -5.9, "ry": 31, "s": 1.0, "flat": 0, "r": 2.6}, {"file": "props/roller-shutter-door/rollershutter_door_1k.glb", "x": -4.94, "y": 0, "z": -8.22, "ry": 31, "s": 1.5, "flat": 0, "r": 1.6}, {"file": "props/welding-cart/portable_welding_cart_1k.glb", "x": -6.5, "y": 0, "z": -5.2, "ry": 55, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/metal-workbench/metal_workbench.glb", "x": -3.9, "y": 0, "z": 8.75, "ry": 180, "s": 1.0, "flat": 0, "r": 1.3}, {"file": "props/metal-tool-chest/metal_tool_chest_2k.glb", "x": -5.45, "y": 0, "z": 9.05, "ry": 168, "s": 1.0, "flat": 0, "r": 0.85}, {"file": "props/tool-cart/tool_cart_1k.glb", "x": 3.9, "y": 0, "z": 8.6, "ry": 185, "s": 1.0, "flat": 0, "r": 0.8}, {"file": "props/metal-stool/metal_stool_01_1k.glb", "x": 1.15, "y": 0, "z": 7.45, "ry": 200, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/bench-vice/bench_vice_01_1k.glb", "x": -4.5, "y": 0.92, "z": 8.6, "ry": 180, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/hammer/cross_pein_hammer_1k.glb", "x": -3.6, "y": 0.92, "z": 8.85, "ry": 35, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/adjustable-wrench/adjustable_wrench_1k.glb", "x": -3.15, "y": 0.92, "z": 8.6, "ry": -20, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/hand-drill/Drill_01_1k.glb", "x": -4.15, "y": 0.92, "z": 8.95, "ry": 160, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/ratchet-wrench/ratchet_wrench_1k.glb", "x": 0.95, "y": 0.84, "z": 8.7, "ry": 15, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/drill-press/drill_press_01_1k.glb", "x": 9.35, "y": 0, "z": -3.35, "ry": -70, "s": 1.0, "flat": 0, "r": 0.8}, {"file": "props/power-box/power_box_01_1k.glb", "x": 10.5, "y": 1.55, "z": -4.95, "ry": -65, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/industrial-pipes/modular_industrial_pipes_01_1k.glb", "x": 10.25, "y": 0, "z": -6.1, "ry": -65, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/old-tyre/old_tyre_1k.glb", "x": 8.55, "y": 0.08, "z": -6.55, "ry": 0, "s": 1, "flat": 1, "r": 0.55}, {"file": "props/old-tyre/old_tyre_1k.glb", "x": 8.55, "y": 0.24, "z": -6.55, "ry": 40, "s": 1, "flat": 1, "r": 0.55}, {"file": "props/old-tyre/old_tyre_1k.glb", "x": 8.55, "y": 0.4, "z": -6.55, "ry": 95, "s": 1, "flat": 1, "r": 0.55}, {"file": "props/old-tyre/old_tyre_1k.glb", "x": 8.55, "y": 0.56, "z": -6.55, "ry": 150, "s": 1, "flat": 1, "r": 0.55}, {"file": "props/old-tyre/old_tyre_1k.glb", "x": 7.8, "y": 0.3, "z": -5.95, "ry": 20, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/metal-rack-shelf/worn_metal_rack_1k.glb", "x": -10.02, "y": 0, "z": 2.6, "ry": 90, "s": 1.0, "flat": 0, "r": 1.3}, {"file": "props/drawer-cabinet/drawer_cabinet_1k.glb", "x": 10.05, "y": 0, "z": 3.35, "ry": -90, "s": 1.0, "flat": 0, "r": 0.8}, {"file": "props/ladder/ladder_sectioned_01_1k.glb", "x": 9.62, "y": 0, "z": 4.75, "ry": -90, "s": 1.0, "flat": 0, "r": 0.6}, {"file": "props/wall-shelf/Shelf_01_1k.glb", "x": 4.6, "y": 0, "z": 10.3, "ry": 180, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/wooden-crate/wooden_crate_01_1k.glb", "x": -5.6, "y": 0, "z": 9.7, "ry": 8, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/wooden-crate/wooden_crate_01_1k.glb", "x": -5.6, "y": 0.35, "z": 9.7, "ry": -6, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/military-crate/old_military_crate_1k.glb", "x": -4.62, "y": 0, "z": 9.8, "ry": -12, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/plastic-crate/plastic_crate_01_1k.glb", "x": -6.55, "y": 0, "z": 9.55, "ry": 15, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/plastic-crate/plastic_crate_01_1k.glb", "x": -6.55, "y": 0.26, "z": 9.55, "ry": -10, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/plastic-crate/plastic_crate_01_1k.glb", "x": -6.55, "y": 0.52, "z": 9.55, "ry": 30, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/plastic-crate/plastic_crate_01_1k.glb", "x": 9.8, "y": 0, "z": -1.85, "ry": 20, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/plastic-crate/plastic_crate_01_1k.glb", "x": 9.8, "y": 0.26, "z": -1.85, "ry": -15, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/barrel-weathered/barrel_03_1k.glb", "x": -7.35, "y": 0, "z": 6.35, "ry": 0, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/barrel/Barrel_01_1k.glb", "x": -6.55, "y": 0, "z": 6.95, "ry": 40, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/barrel/Barrel_01_1k.glb", "x": -7.95, "y": 0, "z": 5.55, "ry": 15, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/kenney-space-station/table-display-planet.glb", "x": -6.9, "y": 0, "z": 1.55, "ry": 103, "s": 0.55, "flat": 0, "r": 0.9}, {"file": "props/searchlight/portable_searchlight_1k.glb", "x": -3.6, "y": 0, "z": 4.3, "ry": 140, "s": 3.0, "flat": 0, "r": 0.9}, {"file": "props/industrial-lamp/hanging_industrial_lamp_1k.glb", "x": -3.9, "y": 4.3, "z": 8.75, "ry": 0, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/industrial-lamp/hanging_industrial_lamp_1k.glb", "x": -3.9, "y": 4.4, "z": -5.9, "ry": 31, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/industrial-lamp/hanging_industrial_lamp_1k.glb", "x": 9.35, "y": 4.1, "z": -3.35, "ry": 0, "s": 1.0, "flat": 0, "r": 1.0}, {"file": "props/fluorescent-lights/mounted_fluorescent_lights_1k.glb", "x": 0, "y": 3.35, "z": 8.8, "ry": 0, "s": 1, "flat": 0, "r": 0.55}, {"file": "props/fluorescent-lights/mounted_fluorescent_lights_1k.glb", "x": -3.9, "y": 3.35, "z": 8.75, "ry": 0, "s": 1, "flat": 0, "r": 0.55}];
+  var propItems=[],propsReady=false,propAO=[];
+  async function propsLoad(){
+    var byFile={};
+    PROP_PLACEMENTS.forEach(function(p){(byFile[p.file]=byFile[p.file]||[]).push(p)});
+    for(var file in byFile){
+      try{
+        var mats4=byFile[file].map(function(p){
+          var m=mul(T(p.x,p.y,p.z),mul(rotY(p.ry*Math.PI/180),scl(p.s,p.s,p.s)));
+          if(p.flat)m=mul(m,rotX(-Math.PI/2));
+          return m;
+        });
+        var res=await glbLoadStatic(file,mats4);
+        /* bench-vice trap guard: the vice's source scene carried a junk
+           ~2 m "Icosphere" outlier mesh (the shipped GLB is clean —
+           4 meshes, ~0.37 m overall, verified Oct 16). If an outlier
+           ever reappears in this file, drop meshes >1 m here rather
+           than framing/scaling by raw bounds. No-op on the clean file. */
+        if(file.indexOf('bench_vice')>=0){
+          res.items=res.items.filter(function(it){return !(it.ext>1.0)});
+        }
+        res.items.forEach(function(it){propItems.push(it)});
+        byFile[file].forEach(function(p){propAO.push(p)});
+      }catch(e){logEvent('state','prop load failed '+file+': '+e.message,'v18')}
+    }
+    propsReady=true;
+    logEvent('state','props loaded: '+propItems.length+' meshes','v18');
+  }
+  function drawPropsGLB(pv){
+    if(!propsReady)return;
+    drawGLBItems(pv,propItems,0.55,0.12);
+    for(var i=0;i<propAO.length;i++){
+      var p=propAO[i];
+      drawAOBlob(pv,p.x,0.012,p.z,Math.max(0.5,p.r||1.1),0.34);
+    }
+  }
+  /* freestanding partition carrying the roller shutter (placement law:
+     the shell wall is fully tiled by screens) + the searchlight fixture
+     aimed at the pad (visual only — ONE shadow light is law). */
+  function drawPropFixtures(pv){
+    /* evening sky dome (lighting kit): inward cylinder far outside the
+       shell — depth-tested backdrop, horizon band near eye level */
+    if(domeTex){
+      gl.disable(gl.CULL_FACE);
+      drawGeo(pv,cylGeo(true),mul(T(0,-1.5,0),scl(36,15,36)),[0.55,0.58,0.66],{tex:domeTex,alpha:1,spec:0,glow:0.55});
+      gl.enable(gl.CULL_FACE);
+    }
+    drawBox(pv,-4.94,0,-8.22,3.6,3.1,0.18,[0.23,0.24,0.27],0.5);
+    drawBox(pv,-4.94,3.1,-8.22,3.7,0.14,0.24,[0.30,0.31,0.34],0.5);
+    /* searchlight prop sits in props; add its glow cone sprite + pool */
+    if(spriteTex.glow){
+      drawSprite(pv,-3.6,0.95,4.3,1.15,1.15,spriteTex.glow,[1,0.95,0.8,0.30+0.1*Math.sin(envT*0.007)*0.3]);
+      drawRingFlat(pv,0,0.014,0,1.2,2.1,[1,0.95,0.8,0.05]);
+    }
+    if(poolTex)drawPoolDecal(pv,0,0,3.4,LIGHT.g.sunPool);
+  }
+
+  /* ================== V18 EXIA BODY ==================
+     Sunny's body is the rigged Exia (deploy-assets/models/exia.glb,
+     meshopt). 117 primitives are grouped at load by (material, dominant
+     bone) into ~30 draw batches; bones run CPU FK and each batch draws
+     with the standard drawGeo path under a per-bone world matrix.
+     Poses come from the GLB's own baked clips (sampled per joint, not
+     played wholesale): Walk loops under procedural locomotion, Wave /
+     Hover / Flip / SwordPose are one-shot tricks, idle-look is the
+     standing base, kneel is the parked stance. Trans-Am + colorways are
+     pure material state over the style pack (colorway -> accent ->
+     Trans-Am), never persisted for Trans-Am. */
+  var EXIA_DATA={"matNames": ["toon", "bleck", "red", "wheil", "red2", "brown", "yellow", "blue", "gerrn", "while2", "purple", "eye"], "jointIdx": {"root": 0, "hips": 1, "spine": 2, "chest": 3, "neck": 4, "head": 5, "shoulder.L": 6, "upperarm.L": 7, "forearm.L": 8, "hand.L": 9, "shoulder.R": 10, "upperarm.R": 11, "forearm.R": 12, "hand.R": 13, "thigh.L": 14, "shin.L": 15, "foot.L": 16, "thigh.R": 17, "shin.R": 18, "foot.R": 19}, "colorways": {"Solar": {"bleck": "#171717", "blue": "#4C79E7", "brown": "#7C7277", "eye": "#A9FFFF", "purple": "#BB68E7", "red": "#E72320", "red2": "#A30C14", "toon": "#4F4F56", "wheil": "#E7E7E7", "while2": "#BBBBBB", "yellow": "#FFCF58", "gerrn": "#469C2E"}, "Midnight": {"wheil": "#2E3646", "while2": "#222833", "blue": "#1E3263", "red": "#8E232C", "red2": "#52121A", "yellow": "#C9973F", "purple": "#6A3FA0", "gerrn": "#35934B", "eye": "#8FE8FF", "toon": "#12151C", "bleck": "#060708", "brown": "#262230"}, "Crimson": {"wheil": "#9E1B23", "while2": "#67272C", "blue": "#38090F", "red": "#E72320", "red2": "#5F0A10", "yellow": "#E8B33C", "purple": "#B03060", "gerrn": "#469C2E", "eye": "#FFD76A", "toon": "#1C1114", "bleck": "#0A0506", "brown": "#33201F"}, "Royal": {"wheil": "#EDF0F4", "while2": "#8E9BB5", "blue": "#2B4BC4", "red": "#C8102E", "red2": "#7A0C1E", "yellow": "#D4AF37", "purple": "#6C3FD4", "gerrn": "#469C2E", "eye": "#A9FFFF", "toon": "#232A3A", "bleck": "#0B0D12", "brown": "#2E2A33"}}, "accents": {"Orange": {"eye": {"color": "#FFB066", "emissive": "#FF7A1A", "emissiveIntensity": 0.9}, "gerrn": {"color": "#FF8C2E", "emissive": "#FF7A1A", "emissiveIntensity": 1.1}, "purple": {"color": "#FF5E3A", "emissive": "#FF4A26", "emissiveIntensity": 0.7}}, "Cyan": {"eye": {"color": "#A9FFFF", "emissive": "#19E3FF", "emissiveIntensity": 1.0}, "gerrn": {"color": "#2EE6C8", "emissive": "#17D8C8", "emissiveIntensity": 1.1}, "purple": {"color": "#35B6FF", "emissive": "#2E9FE8", "emissiveIntensity": 0.7}}, "Magenta": {"eye": {"color": "#FF9FF3", "emissive": "#FF3FD4", "emissiveIntensity": 1.0}, "gerrn": {"color": "#FF6FE0", "emissive": "#FF3FD4", "emissiveIntensity": 1.1}, "purple": {"color": "#D12FE0", "emissive": "#C026D3", "emissiveIntensity": 0.8}}}, "accentMats": ["eye", "gerrn", "purple"], "taMats": {"wheil": {"c": [1.0, 0.1119324278369056, 0.1714411007328226], "i": 1.6}, "while2": {"c": [0.9046611743911496, 0.042311410620809675, 0.08437621154414882], "i": 1.2}, "blue": {"c": [1.0, 0.07421356838014963, 0.14412847085805777], "i": 1.4}, "red": {"c": [1.0, 0.017641954488384078, 0.03954623527673284], "i": 1.6}, "red2": {"c": [0.7454042095403874, 0.006048833022857054, 0.0295568344378088], "i": 1.1}, "yellow": {"c": [1.0, 0.1946178304415758, 0.07421356838014963], "i": 1.2}, "purple": {"c": [1.0, 0.07421356838014963, 0.3419144249086609], "i": 1.6}, "gerrn": {"c": [1.0, 0.03688945040110004, 0.08650046203654976], "i": 1.6}, "eye": {"c": [0.467783796112159, 1.0, 0.5840784178911641], "i": 1.6}}, "taStays": {"toon": "inner frame / joints - stays deep so the glowing armor reads against structure", "bleck": "near-black detail - stays dark", "brown": "cloth cloak - does not glow; at most a faint rim from the armor light (no emissive override)"}};
+  var exiaReady=false,exiaParts=[],exiaClips={},exiaBaseColors=[],exiaCurColors=[];
+  var exiaAccentGlow={};
+  var exiaRest={};         /* joint idx -> {t:[x,y,z], q:[x,y,z,w]} bind local */
+  var exiaParent=[],exiaJoints=[];
+  var TR={active:null,t:0,dur:0,hoverHold:false,swordHold:false};
+  var hoverAmt=0,hoverTime=0,kneelAmt=0,dashDone=false;
+  /* QA-observable trick state (flat primitives, kept in sync below) */
+  var trickName='',flipT=0,swordT=0,hoverState=false;
+  var exiaEyeMat=null;
+  function exiaQuatMul(a,b){return[
+    a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],
+    a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],
+    a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],
+    a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]]}
+  function exiaQuatNorm(q){var l=Math.hypot(q[0],q[1],q[2],q[3])||1;return[q[0]/l,q[1]/l,q[2]/l,q[3]/l]}
+  function exiaSlerp(a,b,t){
+    var d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3],bb=b;
+    if(d<0){bb=[-b[0],-b[1],-b[2],-b[3]];d=-d}
+    if(d>0.9995)return exiaQuatNorm([a[0]+(bb[0]-a[0])*t,a[1]+(bb[1]-a[1])*t,a[2]+(bb[2]-a[2])*t,a[3]+(bb[3]-a[3])*t]);
+    var th=Math.acos(Math.min(1,d)),s=Math.sin(th),wa=Math.sin((1-t)*th)/s,wb=Math.sin(t*th)/s;
+    return[a[0]*wa+bb[0]*wb,a[1]*wa+bb[1]*wb,a[2]*wa+bb[2]*wb,a[3]*wa+bb[3]*wb];
+  }
+  function eulerXYZ(x,y,z){return mul(matRZ(z),mul(matRY(y),matRX(x)))}
+  function exiaQuatMat(q){
+    var x=q[0],y=q[1],z=q[2],w=q[3],x2=x+x,y2=y+y,z2=z+z;
+    var xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2,wx=w*x2,wy=w*y2,wz=w*z2;
+    return new Float32Array([1-(yy+zz),xy+wz,xz-wy,0, xy-wz,1-(xx+zz),yz+wx,0, xz+wy,yz-wx,1-(xx+yy),0, 0,0,0,1]);
+  }
+  function exiaSampleTrack(tr,time,loop,dur){
+    /* tr = {times:Float32Array, vals:Float32Array, n:ncomp} -> lerped array */
+    var times=tr.times,n=times.length;
+    if(n===1)return Array.prototype.slice.call(tr.vals,0,tr.n);
+    var t=time;
+    if(loop){t=t%dur;if(t<0)t+=dur}else t=Math.max(0,Math.min(dur,t));
+    var lo=0,hi=n-1;
+    while(lo<hi-1){var mid=(lo+hi)>>1;if(times[mid]<=t)lo=mid;else hi=mid}
+    var span=times[hi]-times[lo],f=span>1e-6?(t-times[lo])/span:0;
+    var out=new Array(tr.n);
+    for(var c=0;c<tr.n;c++){
+      var a=tr.vals[lo*tr.n+c],b=tr.vals[hi*tr.n+c];
+      out[c]=tr.n===4?0:a+(b-a)*f;
+    }
+    if(tr.n===4){
+      var qa=Array.prototype.slice.call(tr.vals,lo*4,lo*4+4);
+      var qb=Array.prototype.slice.call(tr.vals,hi*4,hi*4+4);
+      return exiaSlerp(qa,qb,f);
+    }
+    return out;
+  }
+  function exiaClipPose(clip,time,loop,pose){
+    /* pose: jointIdx -> {t,q} mutated from rest copy */
+    for(var ji in exiaRest){pose[ji]={t:exiaRest[ji].t.slice(),q:exiaRest[ji].q.slice()}}
+    var dur=clip.dur;
+    for(var ci=0;ci<clip.tracks.length;ci++){
+      var tr=clip.tracks[ci],p=pose[tr.j];
+      if(!p)continue;
+      if(tr.path==='translation')p.t=exiaSampleTrack(tr.tr,time,loop,dur);
+      else if(tr.path==='rotation')p.q=exiaSampleTrack(tr.tr,time,loop,dur);
+    }
+  }
+  function exiaBlendPose(dst,src,w,skipRootT){
+    for(var ji in src){
+      var d=dst[ji];if(!d){dst[ji]={t:src[ji].t.slice(),q:src[ji].q.slice()};continue}
+      if(!(skipRootT&&+ji===EXIA_ROOT_JI)){
+        d.t[0]+=(src[ji].t[0]-d.t[0])*w;d.t[1]+=(src[ji].t[1]-d.t[1])*w;d.t[2]+=(src[ji].t[2]-d.t[2])*w;
+      }
+      d.q=exiaSlerp(d.q,src[ji].q,w);
+    }
+  }
+  var EXIA_ROOT_JI=0;
+  async function exiaLoad(){
+    window.__exiaStage='start';
+    try{
+      var j=await glbParse('models/exia.glb');
+      window.__exiaStage='parsed';
+      var skin=j.skins[0];
+      exiaJoints=skin.joints.slice();
+      var ibmAcc=glbAccessor(j,skin.inverseBindMatrices);
+      var ibms=[];
+      for(var b=0;b<exiaJoints.length;b++)ibms.push(new Float32Array(ibmAcc.data.buffer,ibmAcc.data.byteOffset+b*64,16).slice());
+      exiaParent=exiaJoints.map(function(){return -1});
+      j.nodes.forEach(function(n){
+        (n.children||[]).forEach(function(c){
+          var ji=exiaJoints.indexOf(c);
+          var pj=exiaJoints.indexOf(j.nodes.indexOf(n));
+          if(ji>=0&&pj>=0)exiaParent[ji]=pj;
+        });
+      });
+      exiaJoints.forEach(function(ni,ji){
+        var n=j.nodes[ni];
+        exiaRest[ji]={t:(n.translation||[0,0,0]).slice(),q:(n.rotation||[0,0,0,1]).slice()};
+      });
+      /* primitives -> skin batches grouped by (material, bone) */
+      var nodeName={};j.nodes.forEach(function(n,ni){nodeName[ni]=n.name||''});
+      var jointOfNode={};exiaJoints.forEach(function(ni,ji){jointOfNode[ni]=ji});
+      var groups={},order=[];
+      j.nodes.forEach(function(n,ni){
+        if(n.mesh==null)return;
+        var mesh=j.meshes[n.mesh];
+        mesh.primitives.forEach(function(prim){
+          var pa=prim.attributes;
+          var pos=glbAccessor(j,pa.POSITION),nor=pa.NORMAL!=null?glbAccessor(j,pa.NORMAL):null;
+          var jts=pa.JOINTS_0!=null?glbAccessor(j,pa.JOINTS_0):null,wts=pa.WEIGHTS_0!=null?glbAccessor(j,pa.WEIGHTS_0):null;
+          var cnt=pos.count,verts=new Float32Array(cnt*8),bones=new Int16Array(cnt);
+          for(var i=0;i<cnt;i++){
+            var bj=0,bw=-1;
+            if(jts&&wts){for(var k=0;k<4;k++){var wv=wts.data[i*4+k];if(wv>bw){bw=wv;bj=jts.data[i*4+k]}}}
+            bones[i]=bj;
+            /* bake vertex into bind space of its bone: v' = IBM^-1 ... we
+               instead unbind: geometry stored in mesh space; draw matrix
+               = skinMat = jointWorld * IBM. Positions stay raw. */
+            verts[i*8]=pos.data[i*3];verts[i*8+1]=pos.data[i*3+1];verts[i*8+2]=pos.data[i*3+2];
+            if(nor){verts[i*8+3]=nor.data[i*3];verts[i*8+4]=nor.data[i*3+1];verts[i*8+5]=nor.data[i*3+2]}
+            else{verts[i*8+3]=0;verts[i*8+4]=1;verts[i*8+5]=0}
+          }
+          /* split primitive by dominant bone */
+          var byBone={};
+          var idxArr=prim.indices!=null?glbIndexArray(j,prim.indices):null;
+          var triCount=idxArr?idxArr.length/3:cnt/3;
+          for(var t2=0;t2<triCount;t2++){
+            var ia=idxArr?idxArr[t2*3]:t2*3,ib=idxArr?idxArr[t2*3+1]:t2*3+1,ic=idxArr?idxArr[t2*3+2]:t2*3+2;
+            var tb=bones[ia];
+            if(!byBone[tb])byBone[tb]=[];
+            byBone[tb].push(ia,ib,ic);
+          }
+          for(var tbone in byBone){
+            var key=(prim.material||0)+':'+tbone;
+            if(!groups[key]){
+              groups[key]={matIdx:prim.material||0,bone:+tbone,srcVerts:[],srcIdx:[],vmap:{}};
+              order.push(key);
+            }
+            var g=groups[key],tris=byBone[tbone];
+            for(var q2=0;q2<tris.length;q2++){
+              var vi=tris[q2];
+              if(g.vmap[vi]==null){
+                g.vmap[vi]=g.srcVerts.length/8;
+                for(var c2=0;c2<8;c2++)g.srcVerts.push(verts[vi*8+c2]);
+              }
+              g.srcIdx.push(g.vmap[vi]);
+            }
+          }
+        });
+      });
+      exiaParts=order.map(function(key){
+        var g=groups[key];
+        var vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(g.srcVerts),gl.STATIC_DRAW);
+        var ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+        var use32=false;for(var z=0;z<g.srcIdx.length;z++)if(g.srcIdx[z]>65535){use32=true;break}
+        var itype=gl.UNSIGNED_SHORT;
+        if(use32){gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint32Array(g.srcIdx),gl.STATIC_DRAW);itype=gl.UNSIGNED_INT}
+        else gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(g.srcIdx),gl.STATIC_DRAW);
+        return{geo:{vb:vb,ib:ib,count:g.srcIdx.length,it:itype},matIdx:g.matIdx,bone:g.bone,ibm:ibms[g.bone]};
+      });
+      /* materials: base colors from GLB, then style pack on top */
+      exiaBaseColors=(j.materials||[]).map(function(m){
+        var pbr=m.pbrMetallicRoughness||{};var c=pbr.baseColorFactor||[1,1,1,1];
+        return[c[0],c[1],c[2]];
+      });
+      EXIA_DATA.matNames.forEach(function(nm,mi){
+        if(!exiaParts.some(function(p){return p.matIdx===mi}))return;
+      });
+      /* animation clips: mine + extras (same skeleton, mapped by NAME —
+         the extras file has its own node indices) */
+      var mainJointByName={};
+      exiaJoints.forEach(function(ni,ji){mainJointByName[j.nodes[ni].name]=ji});
+      if(mainJointByName['root']!=null)EXIA_ROOT_JI=mainJointByName['root'];
+      function grabClips(jj){
+        (jj.animations||[]).forEach(function(an){
+          var tracks=[],dur=0;
+          an.channels.forEach(function(ch){
+            var samp=an.samplers[ch.sampler];
+            var times=glbAccessor(jj,samp.input),vals=glbAccessor(jj,samp.output);
+            var ji=mainJointByName[jj.nodes[ch.target.node].name];
+            if(ji==null)return;
+            if(times.count)dur=Math.max(dur,times.data[times.data.length-1]);
+            tracks.push({j:ji,path:ch.target.path,tr:{times:times.data,vals:vals.data,n:vals.ncomp}});
+          });
+          exiaClips[an.name]={tracks:tracks,dur:dur};
+        });
+      }
+      grabClips(j);
+      try{var jx=await glbParse('models/exia-extras.glb');grabClips(jx)}catch(exErr){logEvent('state','exia extras clips missing: '+exErr.message,'v18')}
+      exiaApplyStyle();
+      exiaReady=true;
+      window.__exiaStage='ready';
+      logEvent('state','Exia body loaded: '+exiaParts.length+' skin batches, '+Object.keys(exiaClips).length+' clips','v18');
+    }catch(e){
+      logEvent('state','Exia load failed, legacy body engaged: '+e.message,'v18');
+      window.__exiaError=e.message+' || '+(e.stack||'').split('\n').slice(0,3).join(' | ');
+      exiaReady=false;
+    }
+  }
+  /* ---------- style: colorway -> accent -> Trans-Am ----------
+     State lives in V17's shared sunnyStyle object (colorway/accent in
+     the style pack's Capitalized spelling; applySunnyStyle persists it
+     — Trans-Am is NEVER part of that object, so it can't persist). */
+  function exiaApplyStyle(){
+    if(!exiaBaseColors.length)return;
+    var cwKey=sunnyStyle.colorway||'Solar';
+    var cw=EXIA_DATA.colorways[cwKey]||EXIA_DATA.colorways.Solar;
+    exiaCurColors=EXIA_DATA.matNames.map(function(nm,mi){
+      var hex=(cw[nm]||'').toLowerCase();
+      var c=hex&&STY_HEX[hex]?STY_HEX[hex].slice():exiaBaseColors[mi].slice();
+      return c;
+    });
+    exiaAccentGlow={};
+    var acKey=sunnyStyle.accent;
+    if(acKey){
+      var ac=EXIA_DATA.accents[acKey];
+      if(ac)EXIA_DATA.accentMats.forEach(function(nm){
+        var mi=EXIA_DATA.matNames.indexOf(nm);
+        if(mi>=0&&ac[nm]){
+          var h=(ac[nm].color||'').toLowerCase();
+          if(STY_HEX[h])exiaCurColors[mi]=STY_HEX[h].slice();
+          exiaAccentGlow[mi]=ac[nm].emissiveIntensity||0;
+        }
+      });
+    }
+  }
+  function exiaPartColor(part){
+    var mi=part.matIdx,nm=EXIA_DATA.matNames[mi];
+    var c=exiaCurColors[mi]||[0.8,0.8,0.8];
+    var glow=0;
+    if(transAm){
+      var tm=EXIA_DATA.taMats[nm];
+      if(tm){c=tm.c;glow=tm.i}
+      else if(EXIA_DATA.taStays.indexOf(nm)>=0){
+        c=[c[0]*0.85,c[1]*0.85,c[2]*0.85];
+      }
+    }
+    if(nm==='eye')glow=Math.max(glow,1.0);
+    if(nm==='gerrn'&&!transAm)glow=Math.max(glow,0.25);
+    if(!transAm&&exiaAccentGlow[mi])glow=Math.max(glow,exiaAccentGlow[mi]*0.8);
+    return{color:c,glow:glow,alpha:1,spec:nm==='while2'||nm==='wheil'?0.42:0.3,tex:null};
+  }
+  /* ---------- tricks ---------- */
+  function exiaStartTrick(kind){
+    if(kind==='wave'){TR.active='wave';TR.t=0;TR.dur=exiaClips.Wave?exiaClips.Wave.dur:1.35}
+    else if(kind==='flip'){TR.active='flip';TR.t=0;TR.dur=exiaClips.Flip?Math.min(exiaClips.Flip.dur,1.6):1.2}
+    else if(kind==='sword'){TR.active='sword';TR.t=0;TR.dur=exiaClips['sword-draw']?exiaClips['sword-draw'].dur:1.96;TR.swordHold=true}
+  }
+  function exiaLandHover(){if(hoverAmt>0.001){/* hoverAmt decays in update */}hoverTime=0}
+  function exiaToggleHover(){
+    if(hoverAmt>0.5||TR.hoverHold){TR.hoverHold=false;hoverTime=0}
+    else{TR.hoverHold=true;hoverTime=45}
+  }
+  /* ---------- pose + draw ---------- */
+  var exiaPose={},exiaPoseB={},exiaWorlds=[];
+  function updateExia(dt){
+    /* trick timers + hover/kneel state are pure logic — they advance
+       whether or not the GLB has arrived (only drawing needs it) */
+    /* trick timers */
+    if(TR.active){TR.t+=dt;
+      if(TR.active==='wave'&&TR.t>=TR.dur)TR.active=null;
+      if(TR.active==='flip'&&TR.t>=TR.dur)TR.active=null;
+      if(TR.active==='sword'&&TR.t>=TR.dur&&!TR.swordHold)TR.active=null;
+    }
+    if(TR.swordHold&&TR.t>20){TR.swordHold=false;if(TR.active==='sword')TR.active=null}
+    trickName=TR.active||(TR.swordHold?'sword':'');
+    flipT=TR.active==='flip'?Math.min(1,TR.t/Math.max(0.01,TR.dur)):0;
+    swordT=TR.active==='sword'?Math.min(1,TR.t/Math.max(0.01,TR.dur)):0;
+    hoverState=hoverAmt>0.05||TR.hoverHold;
+    /* hover amount */
+    var hTarget=TR.hoverHold?1:0;
+    hoverAmt+=(hTarget-hoverAmt)*Math.min(1,dt*3.2);
+    if(TR.hoverHold){hoverTime-=dt;if(hoverTime<=0)TR.hoverHold=false}
+    if(hoverAmt<0.01&&!TR.hoverHold)hoverAmt=0;
+    /* kneel amount: parked at pad & settled & not following */
+    var kTarget=(sunnyStyle.follow===false&&sunnyMode==='in'&&Math.hypot(sunny.x,sunny.z)<0.6&&hangarState!=='open')?1:0;
+    kneelAmt+=(kTarget-kneelAmt)*Math.min(1,dt*1.4);
+    if(kneelAmt<0.01)kneelAmt=0;
+  }
+  var exiaDrawBlack={color:[0.05,0.05,0.06],tex:null,alpha:1,spec:0.2,glow:0,hero:0,rim:0};
+  function drawExia(pv){
+    if(!exiaReady){drawSunnyLegacy(pv);return}
+    var moving=sunny.moving===true;
+    var pose=exiaPose;
+    /* base pose */
+    if(moving&&exiaClips.Walk){
+      exiaClipPose(exiaClips.Walk,sunny.phase/(Math.PI*2)*exiaClips.Walk.dur,true,pose);
+    }else if(exiaClips['idle-look']){
+      exiaClipPose(exiaClips['idle-look'],(envT/1000)%exiaClips['idle-look'].dur,true,pose);
+    }else{
+      for(var ji0 in exiaRest)pose[ji0]={t:exiaRest[ji0].t.slice(),q:exiaRest[ji0].q.slice()};
+    }
+    /* parked kneel (bay-rest stance) eased over the idle base */
+    if(kneelAmt>0&&exiaClips.kneel){
+      exiaClipPose(exiaClips.kneel,Math.min(kneelAmt,1)*1.55,false,exiaPoseB);
+      var ke=kneelAmt*kneelAmt*(3-2*kneelAmt);
+      exiaBlendPose(pose,exiaPoseB,ke);
+    }
+    /* head tracking: rotate head joint toward viewer (clamped) */
+    var headJi=EXIA_DATA.jointIdx.head;
+    if(pose[headJi]){
+      var hx=sunny.x+Math.sin(sunny.headYaw)*-0.0,hWant=sunny.headYaw,hPit=sunny.headPitch;
+      var local=exiaQuatMat(pose[headJi].q);
+      var extra=eulerXYZ(hPit*0.55,0,-hWant*0.5);
+      var q2=exiaQuatFromMat(mul(extra,local));
+      pose[headJi].q=exiaSlerp(pose[headJi].q,q2,0.85);
+    }
+    /* trick overlays */
+    if(TR.active==='wave'&&exiaClips.Wave){
+      exiaClipPose(exiaClips.Wave,TR.t,false,exiaPoseB);
+      var wv=TR.t<0.25?TR.t/0.25:(TR.t>TR.dur-0.3?Math.max(0,(TR.dur-TR.t)/0.3):1);
+      ['upperarm.R','forearm.R','hand.R','shoulder.R'].forEach(function(bn){
+        var ji=EXIA_DATA.jointIdx[bn];var src=exiaPoseB[ji];
+        if(src&&pose[ji]){pose[ji].t=src.t.slice();pose[ji].q=exiaSlerp(pose[ji].q,src.q,wv)}
+      });
+      if(exiaPoseB[EXIA_DATA.jointIdx.head]&&pose[EXIA_DATA.jointIdx.head])
+        pose[EXIA_DATA.jointIdx.head].q=exiaSlerp(pose[EXIA_DATA.jointIdx.head].q,exiaPoseB[EXIA_DATA.jointIdx.head].q,wv*0.7);
+    }
+    if(TR.active==='sword'&&exiaClips['sword-draw']){
+      exiaClipPose(exiaClips['sword-draw'],Math.min(TR.t,exiaClips['sword-draw'].dur-0.001),false,exiaPoseB);
+      var sw=TR.t<0.3?TR.t/0.3:1;
+      exiaBlendPose(pose,exiaPoseB,sw*(moving?0.75:1));
+    }
+    if(hoverAmt>0&&exiaClips.Hover){
+      var hDur=exiaClips.Hover.dur;
+      exiaClipPose(exiaClips.Hover,hDur*0.52,false,exiaPoseB);
+      /* skip root translation: the +0.40 m lift comes from the root
+         offset below (and the QA-pinned altitude), not the clip */
+      exiaBlendPose(pose,exiaPoseB,hoverAmt*(moving?0.7:1),true);
+    }
+    /* FK */
+    var sy=sunny.y||0;
+    if(TR.active==='flip'&&exiaClips.Flip){
+      exiaClipPose(exiaClips.Flip,TR.t*(exiaClips.Flip.dur/TR.dur),false,exiaPoseB);
+      exiaBlendPose(pose,exiaPoseB,1);
+    }
+    var rootM=T(sunny.x,sy+hoverAmt*EXIA_HOVER_ALT,sunny.z);
+    /* root joint gets model transform: yaw from sunny.yaw; flip/sword clip
+       root local replaces rest for joint 0 via pose already (its t/q came
+       from clip when full-pose sampled; blends above may have diluted). */
+    for(var ji=0;ji<exiaJoints.length;ji++){
+      var p=pose[ji]||exiaRest[ji];
+      var lm=mul(T(p.t[0],p.t[1],p.t[2]),exiaQuatMat(p.q));
+      var par=exiaParent[ji];
+      exiaWorlds[ji]=par<0?mul(rootM,mul(rotY(sunny.yaw),lm)):mul(exiaWorlds[par],lm);
+    }
+    var heroU=exiaHeroNow(),rimU=exiaRimNow();
+    for(var pi=0;pi<exiaParts.length;pi++){
+      var part=exiaParts[pi];
+      var w=mul(exiaWorlds[part.bone],part.ibm);
+      var mc=exiaPartColor(part);
+      mc.hero=heroU;mc.rim=rimU;
+      drawGeo(pv,part.geo,w,mc.color,mc);
+    }
+  }
+  function exiaQuatFromMat(m){
+    var t=m[0]+m[5]+m[10],q;
+    if(t>0){var s=Math.sqrt(t+1)*2;q=[(m[6]-m[9])/s,(m[8]-m[2])/s,(m[1]-m[4])/s,0.25*s]}
+    else if(m[0]>m[5]&&m[0]>m[10]){var s1=Math.sqrt(1+m[0]-m[5]-m[10])*2;q=[0.25*s1,(m[1]+m[4])/s1,(m[8]+m[2])/s1,(m[6]-m[9])/s1]}
+    else if(m[5]>m[10]){var s2=Math.sqrt(1+m[5]-m[0]-m[10])*2;q=[(m[1]+m[4])/s2,0.25*s2,(m[6]+m[9])/s2,(m[8]-m[2])/s2]}
+    else{var s3=Math.sqrt(1+m[10]-m[0]-m[5])*2;q=[(m[8]+m[2])/s3,(m[6]+m[9])/s3,0.25*s3,(m[1]-m[4])/s3]}
+    return exiaQuatNorm(q);
+  }
+  var EXIA_HOVER_ALT=0.40;
+  function exiaHeroNow(){return transAm?1.5:LIGHT.g.sunnyHero}
+  function exiaRimNow(){return transAm?0.85:LIGHT.g.sunnyRim}
+
+  /* ================== V18 FLAT PREVIEW ==================
+     ?preview=1&view=spawn|pad|bay|hero&ta=1&bay=open&pose=hover|flip|sword|kneel
+     Drives the real update/render path with a stub viewer so Phase 2
+     screenshots come from the shipped code, not a mock. */
+  var PV_PARAMS={get:function(k){
+    try{
+      var q=(typeof location!=='undefined'&&location.search)||'';
+      var m=new RegExp('[?&]'+k+'=([^&]*)').exec(q);
+      return m?decodeURIComponent(m[1]):null;
+    }catch(e){return null}
+  }};
+  var previewOn=PV_PARAMS.get('preview')==='1';
+  function previewBoot(){
+    if(!previewOn)return;
+    try{
+      if(!gl){
+        gl=canvas.getContext('webgl',{xrCompatible:true,alpha:false,antialias:true,depth:true,stencil:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});
+      }
+      canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+      var pvStyle=document.createElement('style');
+      pvStyle.textContent='body>*:not(canvas){display:none!important}canvas{position:fixed!important;inset:0!important;z-index:0!important}';
+      document.head.appendChild(pvStyle);
+      initScene();sceneReady=true;
+      window.__dbg={drawEnvironment:drawEnvironment,drawSunny:drawSunny,drawGeo:drawGeo,perspective:perspective,lookAtM:lookAtM,setPV:function(pv){_pvCur=pv},getPV:function(){return _pvCur},state:function(){return{uLight:uLight,v18LocNull:v18Loc===null,lightCur:lightCur,prog:!!program,shadowPass:SHADOW_PASS,shadowReady:shadowReady,depthProg:!!depthProgram}},renderShadowMap:renderShadowMap};
+      var lite=PV_PARAMS.get('lite')==='1';
+      lightInit();exiaLoad();
+      if(!lite){propsLoad();loadStatues()}
+      loadLightingAssets();loadPlateTextures();
+      sunnyMode='in';sunny.x=0;sunny.z=0;sunny.y=0;sunny.anchorSet=true;
+      setFollow(false);
+      boardVisible=false;
+      var view=PV_PARAMS.get('view')||'pad';
+      var cam={spawn:{p:[-1.5,1.6,4.6],t:[0.4,1.0,-0.6]},
+               pad:{p:[2.3,1.5,3.1],t:[0,1.0,0]},
+               hero:{p:[1.55,1.35,2.45],t:[0,1.02,0]},
+               bay:{p:[1.1,1.7,1.3],t:[6.1,0.7,6.1]},
+               bayclose:{p:[3.4,1.5,3.2],t:[5.9,0.8,5.9]}}[view]||{p:[2.3,1.5,3.1],t:[0,1.0,0]};
+      if(view==='bay'||view==='bayclose'){sunny.x=5.9;sunny.z=5.9;sunny.settleX=5.9;sunny.settleZ=5.9}
+      if(PV_PARAMS.get('bay')==='open'){hangarState='open';hangarProgress=1}
+      if(PV_PARAMS.get('bay')==='mid'){hangarState='opening';hangarProgress=0.55}
+      if(PV_PARAMS.get('ta')==='1'){transAm=true}
+      var pose=PV_PARAMS.get('pose');
+      sunny.yaw=Math.atan2(-(cam.p[0]-sunny.x),-(cam.p[2]-sunny.z));
+      var stubFrame={getViewerPose:function(){return{transform:{position:{x:cam.p[0],y:cam.p[1],z:cam.p[2]},orientation:{x:0,y:0,z:0,w:1}},views:[]}}};
+      var frames=0,startT=performance.now();
+      var maxFrames=parseInt(PV_PARAMS.get('frames')||'120',10)||120;
+      function loop(){
+        var t=performance.now();
+        envT=t;camPos=cam.p;
+        var dt=1/60;
+        try{updateSunny(stubFrame,dt)}catch(upErr){}
+        if(pose==='hover'){TR.hoverHold=true;hoverAmt=Math.min(1,hoverAmt+dt*2)}
+        if(pose==='kneel'){kneelAmt=Math.min(1,kneelAmt+dt)}
+        if(pose==='sword'&&frames===30)exiaStartTrick('sword');
+        if(pose==='flip'&&frames===30){exiaStartTrick('flip');TR.t=0.62}
+        if(pose==='flip'&&TR.active==='flip')TR.t=0.62;
+        gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+        gl.viewport(0,0,canvas.width,canvas.height);
+        gl.clearColor(0.025,0.045,0.035,1);
+        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+        if(PV_PARAMS.get('noshadow')!=='1'){try{renderShadowMap(t)}catch(shErr){window.__previewError='shadow: '+shErr.message}}
+        var pv=mul(perspective(58*Math.PI/180,canvas.width/canvas.height,0.08,80),lookAtM(cam.p,cam.t,[0,1,0]));
+        _pvCur=pv;
+        var only=PV_PARAMS.get('only');
+        var want=function(k){return !only||only.split(',').indexOf(k)>=0};
+        if(want('env'))drawEnvironment(pv,true);
+        if(want('props'))drawProps(pv);
+        if(want('glb'))drawPropsGLB(pv);
+        if(want('fixtures'))drawPropFixtures(pv);
+        if(want('hangar'))drawHangar(pv);
+        if(want('sunny')&&sunnyMode!=='out')drawSunny(pv,t);
+        if(want('stations'))drawStations(pv,t);
+        if(want('console'))drawCustomizeConsole(pv);
+        if(want('door'))drawDoorway(pv);
+        if(want('holo'))drawHoloPanels(pv);
+        if(want('drones'))drawDrones(pv,t);
+        if(want('atmo'))drawAtmosphere(pv,t);
+        if(want('fx'))drawAtmosphereFX(pv);
+        if(want('dust'))drawDust(pv,t);
+        frames++;
+        window.__previewFrames=frames;
+        if(frames<maxFrames)requestAnimationFrame(loop);
+        else window.__previewDone=true;
+      }
+      requestAnimationFrame(loop);
+    }catch(e){
+      document.title='PREVIEW-ERROR: '+e.message;
+    }
+  }
+  function perspective(fov,asp,n,f){
+    var t=1/Math.tan(fov/2),m=new Float32Array(16);
+    m[0]=t/asp;m[5]=t;m[10]=(f+n)/(n-f);m[11]=-1;m[14]=2*f*n/(n-f);
+    return m;
+  }
+  function lookAtM(eye,center,up){
+    var zx=eye[0]-center[0],zy=eye[1]-center[1],zz=eye[2]-center[2];
+    var zl=Math.hypot(zx,zy,zz);zx/=zl;zy/=zl;zz/=zl;
+    var xx=up[1]*zz-up[2]*zy,xy=up[2]*zx-up[0]*zz,xz=up[0]*zy-up[1]*zx;
+    var xl=Math.hypot(xx,xy,xz)||1;xx/=xl;xy/=xl;xz/=xl;
+    var yx=zy*xz-zz*xy,yy=zz*xx-zx*xz,yz=zx*xy-zy*xx;
+    var m=new Float32Array(16);
+    m[0]=xx;m[1]=yx;m[2]=zx;m[4]=xy;m[5]=yy;m[6]=zy;m[8]=xz;m[9]=yz;m[10]=zz;
+    m[12]=-(xx*eye[0]+xy*eye[1]+xz*eye[2]);
+    m[13]=-(yx*eye[0]+yy*eye[1]+yz*eye[2]);
+    m[14]=-(zx*eye[0]+zy*eye[1]+zz*eye[2]);
+    m[15]=1;
+    return m;
+  }
+  function loadPlateTextures(){
+    var defs={exia:'assets/plates/plate-exia.png',dynames:'assets/plates/plate-dynames.png',virtue:'assets/plates/plate-virtue.png',kyrios:'assets/plates/plate-kyrios.png',rx78:'assets/plates/plate-rx78.png',console:'assets/plates/plate-exia.png'};
+    Object.keys(defs).forEach(function(k){
+      var im=new Image();
+      im.onload=function(){plateTexByKey[k]=glbTexFromImage(im,true)};
+      im.src=defs[k];
+    });
+    var s1=new Image();s1.onload=function(){baySignTex=glbTexFromImage(s1,true)};s1.src='assets/sign-hangar.png';
+    var s2=new Image();s2.onload=function(){bayHazardTex=glbTexFromImage(s2,true)};s2.src='assets/hazard.png';
+  }
+
+  var _v18Booted=false;
+  function v18Boot(){
+    if(_v18Booted)return;_v18Booted=true;
+    try{lightInit()}catch(e1){}
+    try{exiaLoad()}catch(e2){}
+    try{propsLoad()}catch(e3){}
+    try{loadLightingAssets()}catch(e4){}
+    try{loadPlateTextures()}catch(e5){}
+  }
+
+  try{previewBoot()}catch(pbErr){}
 })();
 </script>
 </body>
