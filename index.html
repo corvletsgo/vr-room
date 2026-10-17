@@ -252,8 +252,11 @@
       case 'land':
         /* V18.2: end hover ONLY — clearing hoverHold lets hoverAmt
            decay smoothly to the floor in updateExia (no snap). Follow,
-           park and presence are deliberately untouched. */
-        if(TR.hoverHold||hoverAmt>0.05){TR.hoverHold=false;hoverTime=0;flash(d.flash||'COMING DOWN');return ack(d.acks,'Coming down.')}
+           park and presence are deliberately untouched.
+           V18.3: routed through beginLand (shared with the arm button)
+           so the landing is source-logged as 'land (voice)' on Sunny
+           Link and the wrist chip runs its LANDING window. */
+        if(TR.hoverHold||hoverAmt>0.05){beginLand('voice');flash(d.flash||'COMING DOWN');return ack(d.acks,'Coming down.')}
         return ack(d.already,'Already on the ground.');
       case 'park':{
         exiaLandHover();TR.swordHold=false;
@@ -373,7 +376,7 @@
      answers 404/501, every call below fails in a .catch, and the room
      never notices. Payloads are truncated to ~500 chars per field. */
   var REPORT_URL='https://sunny-bridge.steveclavel1.workers.dev/report';
-  var ROOM_VERSION='V18.2';
+  var ROOM_VERSION='V18.3';
   function logEvent(kind,text,detail){
     try{
       if(kind==='error'){logEvent._ec=(logEvent._ec||0)+1;if(logEvent._ec>10)return}
@@ -445,14 +448,14 @@
   var talkBtn=document.getElementById('talk'),talkLabel=talkBtn?talkBtn.querySelector('.talk-label'):null,voiceStatusEl=document.getElementById('voice-status');
   function micOrbPos(){if(sunnyMode==='out')return{x:.88,y:1.48,z:.18};return{x:sunny.x+0.88,y:1.48,z:sunny.z+0.18}}
   function setVoiceStatus(text){if(voiceStatusEl)voiceStatusEl.textContent=text;if(talkBtn){talkBtn.classList.remove('recording','thinking','speaking');if(voiceState==='recording')talkBtn.classList.add('recording');else if(voiceState==='thinking')talkBtn.classList.add('thinking');else if(voiceState==='speaking')talkBtn.classList.add('speaking')}if(talkLabel){talkLabel.textContent=voiceState==='recording'?'Listening… release to send':voiceState==='thinking'?'Sunny is thinking…':voiceState==='speaking'?'Sunny is talking…':'Talk to Sunny — Hold'}}
-  function voiceOffline(){voiceState='idle';voiceSpeaking=false;sunnyGlow=false;setVoiceStatus('Voice bridge offline - Sunny can still wave');status.textContent='Voice bridge offline - Sunny can still wave';showVoicePanel('VOICE BRIDGE OFFLINE','Sunny can still wave — try again in a bit.');say('Voice bridge offline - Sunny can still wave')}
+  function voiceOffline(){armTalkWatchdogClear();voiceState='idle';voiceSpeaking=false;sunnyGlow=false;setVoiceStatus('Voice bridge offline - Sunny can still wave');status.textContent='Voice bridge offline - Sunny can still wave';showVoicePanel('VOICE BRIDGE OFFLINE','Sunny can still wave — try again in a bit.');say('Voice bridge offline - Sunny can still wave')}
   function showVoicePanel(title,body){voicePanel.visible=true;voicePanel.title=title||'';voicePanel.body=body||'';updateVoiceTexture()}
   function hideVoicePanel(){voicePanel.visible=false}
   function wrapLines(ctx,text,maxW,maxLines){var words=String(text||'').split(/\s+/),lines=[],cur='';for(var i=0;i<words.length;i++){var t=cur?cur+' '+words[i]:words[i];if(ctx.measureText(t).width>maxW&&cur){lines.push(cur);cur=words[i];if(lines.length>=maxLines)break}else cur=t}if(cur&&lines.length<maxLines)lines.push(cur);return lines}
   function drawVoiceCanvas(){if(!voiceCtx)return;var x=voiceCtx;x.fillStyle='#0d1a16';x.fillRect(0,0,640,400);x.strokeStyle=voiceState==='recording'?'#ff6a2a':'#3fe3ff';x.lineWidth=10;x.strokeRect(8,8,624,384);x.fillStyle=voiceState==='recording'?'#ff6a2a':'#3fe3ff';x.fillRect(8,8,624,78);x.fillStyle='#0b100d';x.font='bold 32px Arial';x.fillText(voicePanel.title||'SUNNY',30,58);if(obFlashText){x.fillStyle='#ffb02e';x.fillRect(8,92,624,34);x.fillStyle='#141b06';x.font='bold 20px Arial';x.fillText(obFlashText,30,116)}x.fillStyle='#eef4ee';x.font='bold 24px Arial';var lines=wrapLines(x,voicePanel.body,580,7);lines.forEach(function(ln,i){x.fillText(ln,30,138+i*40)});x.fillStyle='rgba(238,244,238,.55)';x.font='bold 17px Arial';x.fillText(voiceState==='recording'?'RELEASE TRIGGER TO SEND':'HOLD TRIGGER ON THE MIC ORB TO TALK',30,368);var fst='FOLLOW: '+(sunnyStyle.follow===false?'OFF — PARKED':'ON');x.fillStyle=sunnyStyle.follow===false?'#ffb02e':'rgba(238,244,238,.55)';x.fillText(fst,610-x.measureText(fst).width,368)}
   function updateVoiceTexture(){drawVoiceCanvas();if(gl&&voiceTexture&&voiceCanvas){try{gl.bindTexture(gl.TEXTURE_2D,voiceTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,voiceCanvas)}catch(e){}}}
   function handleBridgeAction(action){if(!action)return;var a=String(action).toLowerCase();if(a==='money'){openStation=0;ebayOpen=false}else if(a==='builds'){openStation=1;ebayOpen=false}else if(a==='stats'){openStation=2;ebayOpen=false}else if(a==='ebay'){ebayOpen=true;openStation=-1}else if(a==='wall'){boardVisible=true;if(!session){board.classList.add('focus');wallBtn.setAttribute('aria-expanded','true');wallLabel.textContent='Close wall'}}else if(a==='come'){setFollow(true);forceCome=true;sunny.anchorSet=false;waveUntil=performance.now()+1200;flashObedience('FOLLOWING YOU')}else if(a==='stay'||a==='stop'){if(setFollow(false))flashObedience('PARKED \u2014 SAY "FOLLOW ME" TO RESUME')}else if(a==='follow'){setFollow(true);flashObedience('FOLLOWING YOU')}else if(a==='bye'||a==='leave'||a==='exit'){startExit()}else if(a==='enter'||a==='comein'){startEnter()}}
-  function stopSpeakingGlow(){voiceSpeaking=false;if(voiceState==='speaking')voiceState='idle';sunnyGlow=false;setVoiceStatus('Hold “Talk to Sunny” (or the mic orb in VR) to speak. Release to send.')}
+  function stopSpeakingGlow(){armTalkWatchdogClear();voiceSpeaking=false;if(voiceState==='speaking')voiceState='idle';sunnyGlow=false;setVoiceStatus('Hold “Talk to Sunny” (or the mic orb in VR) to speak. Release to send.')}
   /* ================== V17 ENGLISH GUARD (client) ==================
      BUG 2: in his V16 test Sunny "spoke in some random ass language" —
      the bridge brain (gpt-oss-120b) can drift out of English, and
@@ -492,8 +495,8 @@
   function playReply(data){if(data&&data.reply&&!looksEnglish(data.reply)){speakFallback(CANNED_EN_ACK);return}if(data.audio_base64){try{voiceState='speaking';voiceSpeaking=true;sunnyGlow=true;setVoiceStatus('Sunny is talking…');if(voiceAudio){try{voiceAudio.pause()}catch(e){}}voiceAudio=new Audio('data:audio/wav;base64,'+data.audio_base64);voiceAudio.onended=stopSpeakingGlow;voiceAudio.onerror=function(){stopSpeakingGlow();speakFallback(looksEnglish(data.reply)?data.reply:CANNED_EN_ACK)};var p=voiceAudio.play();if(p&&p.catch)p.catch(function(){stopSpeakingGlow();speakFallback(looksEnglish(data.reply)?data.reply:CANNED_EN_ACK)});return}catch(e){}}speakFallback(data.reply)}
   function speakFallback(text){if(!text){stopSpeakingGlow();return}try{if(!('speechSynthesis' in window)){stopSpeakingGlow();return}voiceState='speaking';voiceSpeaking=true;sunnyGlow=true;setVoiceStatus('Sunny is talking…');var u=new SpeechSynthesisUtterance(text);u.onend=stopSpeakingGlow;u.onerror=stopSpeakingGlow;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){stopSpeakingGlow()}}
   async function ensureMicStream(){if(mediaStream&&mediaStream.active)return mediaStream;if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Mic unavailable');mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});return mediaStream}
-  async function startTalk(){if(voiceState==='recording'||voiceState==='thinking')return;try{await ensureMicStream();audioChunks=[];var mime='';if(typeof MediaRecorder!=='undefined'){if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))mime='audio/webm;codecs=opus';else if(MediaRecorder.isTypeSupported('audio/webm'))mime='audio/webm'}mediaRecorder=mime?new MediaRecorder(mediaStream,{mimeType:mime}):new MediaRecorder(mediaStream);mediaRecorder.ondataavailable=function(ev){if(ev.data&&ev.data.size)audioChunks.push(ev.data)};mediaRecorder.onstop=function(){sendRecordedAudio()};mediaRecorder.start();voiceState='recording';setVoiceStatus('Listening… release to send.');showVoicePanel('LISTENING…','Sunny is listening — release to send.');status.textContent='LISTENING…'}catch(err){voiceOffline()}}
-  function stopTalk(){if(voiceState!=='recording')return;voiceState='thinking';setVoiceStatus('Sending to Sunny…');showVoicePanel('SUNNY IS THINKING…','Heard you — sending that to Sunny…');status.textContent='SUNNY IS THINKING…';try{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();else sendRecordedAudio()}catch(e){voiceOffline()}}
+  async function startTalk(){if(voiceState==='recording'||voiceState==='thinking')return;armTalkWatchdog();try{await ensureMicStream();audioChunks=[];var mime='';if(typeof MediaRecorder!=='undefined'){if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))mime='audio/webm;codecs=opus';else if(MediaRecorder.isTypeSupported('audio/webm'))mime='audio/webm'}mediaRecorder=mime?new MediaRecorder(mediaStream,{mimeType:mime}):new MediaRecorder(mediaStream);mediaRecorder.ondataavailable=function(ev){if(ev.data&&ev.data.size)audioChunks.push(ev.data)};mediaRecorder.onstop=function(){sendRecordedAudio()};mediaRecorder.start();voiceState='recording';setVoiceStatus('Listening… release to send.');showVoicePanel('LISTENING…','Sunny is listening — release to send.');status.textContent='LISTENING…'}catch(err){voiceOffline()}}
+  function stopTalk(){if(voiceState!=='recording')return;armTalkWatchdog();voiceState='thinking';setVoiceStatus('Sending to Sunny…');showVoicePanel('SUNNY IS THINKING…','Heard you — sending that to Sunny…');status.textContent='SUNNY IS THINKING…';try{if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();else sendRecordedAudio()}catch(e){voiceOffline()}}
   async function sendRecordedAudio(){if(!audioChunks.length){voiceOffline();return}try{var type=(mediaRecorder&&mediaRecorder.mimeType)||'audio/webm';var blob=new Blob(audioChunks,{type:type});audioChunks=[];var fd=new FormData();fd.append('file',blob,'talk.webm');fd.append('history',JSON.stringify(voiceHistory.slice(-6)));var res=await fetch(BRIDGE_TALK_URL,{method:'POST',body:fd});if(!res.ok)throw new Error('Bridge '+res.status);var data=await res.json();var transcript=data.transcript||'';var reply=data.reply||'';if(transcript)voiceHistory.push({role:'user',content:transcript});if(reply)voiceHistory.push({role:'assistant',content:reply});voiceHistory=voiceHistory.slice(-8);var panelBody='';if(transcript)panelBody+='You: '+transcript+'  ';if(reply)panelBody+='Sunny: '+reply;showVoicePanel('SUNNY',panelBody||reply||transcript||'');if(reply)say('You: '+(transcript||'…')+'\nSunny: '+reply);var bugReport=isBugReport(transcript);if(bugReport)logEvent('bug',transcript,reply);else if(transcript||reply)logEvent('voice',transcript,(reply||'')+(data.action?' [action:'+data.action+']':''));var ackLine=checkObedience(transcript)||checkObedience(reply,true);if(ackLine){showVoicePanel('SUNNY',ackLine);say(ackLine);speakFallback(ackLine)}else if(bugReport){var bugAck='Logged it — the real me will pick it up and fix it.';showVoicePanel('SUNNY',bugAck);say(bugAck);speakFallback(bugAck)}else{var actLow=String(data.action||'').toLowerCase();var negHit=speechHas(normalizeSpeech(transcript),['stop','dont','do not','never','quit']);if(!(negHit&&(actLow==='come'||actLow==='follow')))handleBridgeAction(data.action);if(reply||data.audio_base64)playReply(data);else{voiceState='idle';setVoiceStatus('Hold to talk again.')}}}catch(err){try{logEvent('error','bridge call failed',String(err&&err.message?err.message:err))}catch(logErr2){}voiceOffline()}}
   function rayFromEvent(e){try{var src=e.inputSource;if(!src||!src.targetRaySpace||!refSpace)return null;var pose=e.frame.getPose(src.targetRaySpace,refSpace);if(!pose||!pose.transform)return null;var m=pose.transform.matrix,p=pose.transform.position;var o=[p.x,p.y,p.z],d=[-m[8],-m[9],-m[10]];var dl=Math.sqrt(d[0]*d[0]+d[1]*d[1]+d[2]*d[2]);if(dl<0.001)return null;return{o:o,d:[d[0]/dl,d[1]/dl,d[2]/dl]}}catch(err){return null}}
   function hitsMicOrb(e){var r=rayFromEvent(e);if(!r)return false;var op=micOrbPos();return rayHitsBox(r.o,r.d,[op.x,op.y,op.z,2.1,2.1,2.1])}
@@ -537,6 +540,13 @@
      The fetch now aborts at 15 s and any talk state older than 30 s
      force-resets to idle with a Sunny Link error event. */
   var armGripWas=false,armChipTex=null,armChipCanvas=null,armChipCtx=null,armChipState='__none';
+  /* V18.3: squeeze press bookkeeping for the click/hold split in
+     updateArmTalk (a press that starts while she hovers is a LAND
+     click until it outlasts ARM_CLICK_MS and promotes to a talk
+     hold), the chip press-ACK flash window, and the chip landing
+     window stamped by beginLand. */
+  var ARM_CLICK_MS=350,armPressT=0,armPressWasHover=false,armPressTalked=false,armChipFlashUntil=0;
+  var armLandT=0,armLandedUntil=0;
   var talkWatchdog=null;
   function armTalkWatchdog(){
     if(talkWatchdog)clearTimeout(talkWatchdog);
@@ -548,6 +558,26 @@
     },30000);
   }
   function armTalkWatchdogClear(){if(talkWatchdog){clearTimeout(talkWatchdog);talkWatchdog=null}}
+  /* V18.3: the poller is WIRED INTO THE FRAME LOOP (onXRFrame) — in
+     V18.2 this function, drawArmChip and the watchdog were defined
+     but never called, so the left grip and the wrist chip were dead
+     in the headset: the session events defer left squeezes to this
+     poller, the poller never ran, and a press "wouldn't read".
+     V18.3 also splits the press by what she is doing:
+       - NOT hovering: the V18.2 behavior, untouched — press starts
+         the talk hold immediately, release sends.
+       - Hovering: the squeeze is the LAND button first. A press does
+         NOT start the mic; a short CLICK (release within
+         ARM_CLICK_MS, 350 ms, with no talk started) lands her
+         locally via armButtonLand — no bridge, no voice. If the
+         press outlasts the click window it promotes to the talk
+         hold, so hold-to-talk still works while she hovers. The two
+         can never collide: a click has already ended (landed) before
+         a hold could start, and a promoted hold releases into
+         stopTalk, never into land.
+     Every press edge also flashes the wrist chip ACK and, while
+     hovering, posts a 'squeeze press (hover)' Sunny Link event, so
+     the next session's /reports read proves the path end to end. */
   function updateArmTalk(){
     if(!session||!session.inputSources)return;
     var pressed=false,found=false;
@@ -558,25 +588,83 @@
       var b=src.gamepad.buttons[1]; /* squeeze / grip */
       if(b&&b.pressed)pressed=true;
     }
-    if(!found){armGripWas=false;return}
-    if(pressed&&!armGripWas){micOrbPressed();startTalk()}
-    else if(!pressed&&armGripWas){if(voiceState==='recording')stopTalk()}
+    if(!found){armGripWas=false;armPressT=0;armPressWasHover=false;armPressTalked=false;return}
+    var now=performance.now();
+    if(pressed&&!armGripWas){
+      /* press edge — the chip ACKs instantly so he can SEE it read */
+      armChipFlashUntil=now+280;
+      armPressT=now;armPressWasHover=(TR.hoverHold||hoverAmt>0.05);armPressTalked=false;
+      if(armPressWasHover){
+        try{logEvent('state','squeeze press (hover)','arm')}catch(pressLogErr){}
+        /* mic deliberately NOT started: this press is a land click
+           unless it proves to be a hold (promotion branch below) */
+      }else{
+        micOrbPressed();startTalk();armPressTalked=true;
+      }
+    }else if(pressed&&armGripWas){
+      /* held: a hover-press older than the click window becomes the
+         talk hold — hold-to-talk while hovering still works */
+      if(armPressWasHover&&!armPressTalked&&armPressT&&now-armPressT>=ARM_CLICK_MS){
+        try{logEvent('state','squeeze hold -> talk (hover)','arm')}catch(holdLogErr){}
+        micOrbPressed();startTalk();armPressTalked=true;
+      }
+    }else if(!pressed&&armGripWas){
+      /* release edge */
+      if(armPressWasHover&&!armPressTalked){
+        /* short click while hovering = LAND, locally, right now */
+        armButtonLand();
+      }else if(voiceState==='recording'){stopTalk()}
+      armPressT=0;armPressWasHover=false;armPressTalked=false;
+    }
     armGripWas=pressed;
   }
-  function armChipDraw(){
+  /* V18.3 chip display mode, priority order: the press-ACK flash
+     (instant proof a squeeze registered) > LANDING / LANDED (a land
+     in progress, then just completed) > the live voice state >
+     the HOVER hint — persistent while she is up, so the drop
+     control is written on his wrist the whole time he might need
+     it — > IDLE. */
+  function armChipMode(){
+    var now=performance.now();
+    if(now<armChipFlashUntil)return 'ack';
+    if(armLandT>0&&hoverAmt>0.02)return 'landing';
+    if(now<armLandedUntil)return 'landed';
+    if(voiceState!=='idle')return voiceState;
+    if(TR.hoverHold||hoverAmt>0.05)return 'hover';
+    return 'idle';
+  }
+  function armChipDraw(mode){
     if(!armChipCtx)return;
     var x=armChipCtx;
-    var map={idle:['#10333d','#3fe3ff','IDLE'],recording:['#4a1408','#ff5a2a','LISTENING'],thinking:['#3d2c07','#ffb02e','WORKING'],speaking:['#17330a','#9be82e','SPEAKING']};
-    var m=map[voiceState]||map.idle;
+    var table={
+      idle:{bg:'#10333d',fg:'#3fe3ff',t1:'IDLE'},
+      recording:{bg:'#4a1408',fg:'#ff5a2a',t1:'LISTENING'},
+      thinking:{bg:'#3d2c07',fg:'#ffb02e',t1:'WORKING'},
+      speaking:{bg:'#17330a',fg:'#9be82e',t1:'SPEAKING'},
+      hover:{bg:'#0d2b45',fg:'#7fd4ff',t1:'HOVERING',t2:'SQUEEZE: DROP'},
+      ack:{bg:'#274b12',fg:'#c6ff7a',t1:'GOT IT'},
+      landing:{bg:'#3d2c07',fg:'#ffb02e',t1:'LANDING…'},
+      landed:{bg:'#17330a',fg:'#9be82e',t1:'LANDED'}
+    };
+    var m=table[mode]||table.idle;
     x.fillStyle='#0b100d';x.fillRect(0,0,256,80);
-    x.fillStyle=m[0];x.fillRect(4,4,248,72);
-    x.strokeStyle=m[1];x.lineWidth=4;x.strokeRect(4,4,248,72);
-    x.fillStyle=m[1];x.beginPath();x.arc(34,40,13,0,7);x.fill();
-    x.font='bold 29px Arial';x.fillText(m[2],58,52);
+    x.fillStyle=m.bg;x.fillRect(4,4,248,72);
+    x.strokeStyle=m.fg;x.lineWidth=4;x.strokeRect(4,4,248,72);
+    x.fillStyle=m.fg;x.beginPath();x.arc(30,40,11,0,7);x.fill();
+    if(m.t2){
+      x.font='bold 23px Arial';x.fillText(m.t1,50,35);
+      x.font='bold 18px Arial';x.fillText(m.t2,50,63);
+    }else{
+      x.font='bold 27px Arial';x.fillText(m.t1,52,52);
+    }
     if(gl&&armChipTex&&armChipCanvas){try{gl.bindTexture(gl.TEXTURE_2D,armChipTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,armChipCanvas)}catch(chipErr){}}
-    armChipState=voiceState;
+    armChipState=mode;
   }
   function drawArmChip(frame,pv){
+    /* landing completion: the descent is done -> stamp the LANDED
+       window (runs before the session/GL guard: pure state, and it
+       is what lets armChipMode report 'landed' exactly once) */
+    if(armLandT>0&&hoverAmt<=0.02){armLandT=0;armLandedUntil=performance.now()+1200}
     if(!session||!session.inputSources||!gl)return;
     if(!armChipCanvas){
       try{
@@ -587,12 +675,13 @@
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-        armChipDraw();
+        armChipDraw(armChipMode());
       }catch(chipErr2){return}
     }
-    if(armChipState!==voiceState)armChipDraw();
-    var colMap={idle:[.10,.30,.36],recording:[.55,.16,.05],thinking:[.45,.30,.05],speaking:[.22,.42,.06]};
-    var plateCol=colMap[voiceState]||colMap.idle;
+    var chipMode=armChipMode();
+    if(armChipState!==chipMode)armChipDraw(chipMode);
+    var colMap={idle:[.10,.30,.36],recording:[.55,.16,.05],thinking:[.45,.30,.05],speaking:[.22,.42,.06],hover:[.08,.22,.38],ack:[.30,.48,.10],landing:[.45,.30,.05],landed:[.22,.42,.06]};
+    var plateCol=colMap[chipMode]||colMap.idle;
     for(var s=0;s<session.inputSources.length;s++){
       var src=session.inputSources[s];
       if(!src||src.handedness!=='left')continue;
@@ -2751,6 +2840,12 @@
     refSpace=effectiveRefSpace();
     if(sceneReady&&baseRefSpace)updateLocomotion(frame,dt);
     if(sceneReady&&baseRefSpace)updateSunny(frame,dt);
+    /* V18.3 ROOT-CAUSE FIX: in V18.2 updateArmTalk + drawArmChip
+       were defined but never called from anywhere — the left grip
+       and the wrist chip were dead in the headset. They are wired
+       here now: poll after updateSunny (hover state is fresh), draw
+       with the per-eye pass below (next to the mic orb). */
+    if(sceneReady&&baseRefSpace)updateArmTalk();
     var pose=frame.getViewerPose(refSpace);
     var layer=session.renderState.baseLayer;
     gl.bindFramebuffer(gl.FRAMEBUFFER,layer.framebuffer);
@@ -2782,6 +2877,7 @@
       if(full){drawPropsGLB(pv);drawPropFixtures(pv);drawHangar(pv)}
       if(sunnyMode!=='out')drawSunny(pv,t);
       drawMicOrb(pv,t);
+      if(full)drawArmChip(frame,pv);
       if(full)drawStations(pv,t);
       if(full)drawCustomizeConsole(pv);
       if(full)drawDoorway(pv);
@@ -2806,7 +2902,7 @@
       if(sceneReady)drawInputs(frame,pv);
     }
   }
-  function reset(){session=null;refSpace=null;baseRefSpace=null;playerOffset={x:0,z:0};playerYaw=0;lastFrameT=0;boardVisible=true;sunnyGlow=false;voiceSpeaking=false;forceCome=false;if(voiceState==='recording'||voiceState==='thinking'){voiceState='idle';setVoiceStatus('Hold “Talk to Sunny” (or the mic orb in VR) to speak. Release to send.')}sunny.x=DOOR_IN.x;sunny.z=DOOR_IN.z;sunnyMode='entering';sunnyPath=[DOOR_WP,[0,0]];sunnyPathI=0;sunny.yaw=0;sunny.headYaw=0;sunny.headPitch=0;sunny.moving=false;sunny.anchorSet=false;sunny.settleX=0;sunny.settleZ=0;openStation=-1;ebayOpen=false;waveUntil=0;label.textContent='Allow VR & Enter';status.textContent='QUEST VR READY — TAP TO ALLOW';enter.disabled=false}
+  function reset(){session=null;refSpace=null;baseRefSpace=null;playerOffset={x:0,z:0};playerYaw=0;lastFrameT=0;boardVisible=true;sunnyGlow=false;voiceSpeaking=false;forceCome=false;if(voiceState==='recording'||voiceState==='thinking'){voiceState='idle';setVoiceStatus('Hold “Talk to Sunny” (or the mic orb in VR) to speak. Release to send.')}sunny.x=DOOR_IN.x;sunny.z=DOOR_IN.z;sunnyMode='entering';sunnyPath=[DOOR_WP,[0,0]];sunnyPathI=0;sunny.yaw=0;sunny.headYaw=0;sunny.headPitch=0;sunny.moving=false;sunny.anchorSet=false;sunny.settleX=0;sunny.settleZ=0;openStation=-1;ebayOpen=false;waveUntil=0;armGripWas=false;armPressT=0;armPressWasHover=false;armPressTalked=false;armLandT=0;label.textContent='Allow VR & Enter';status.textContent='QUEST VR READY — TAP TO ALLOW';enter.disabled=false}
   function failXR(err){
     if(session){try{session.end()}catch(ignore){}}
     reset();
@@ -4338,6 +4434,27 @@
     if(kind==='wave'){TR.active='wave';TR.t=0;TR.dur=exiaClips.Wave?exiaClips.Wave.dur:1.35}
     else if(kind==='flip'){TR.active='flip';TR.t=0;TR.dur=exiaClips.Flip?Math.min(exiaClips.Flip.dur,1.6):1.2}
     else if(kind==='sword'){TR.active='sword';TR.t=0;TR.dur=exiaClips['sword-draw']?exiaClips['sword-draw'].dur:1.96;TR.swordHold=true}
+  }
+  /* V18.3: the ONE landing path, shared by the voice 'land' intent
+     and the left-grip button. Clearing hoverHold lets hoverAmt decay
+     smoothly to the floor in updateExia (no snap); follow, park and
+     presence are deliberately untouched. Stamps the wrist-chip
+     landing window and source-logs the event ('land (voice)' /
+     'land (button)') so a headset session's Sunny Link /reports read
+     proves exactly how she came down. */
+  function beginLand(src){
+    TR.hoverHold=false;hoverTime=0;
+    armLandT=performance.now();armLandedUntil=0;
+    try{logEvent('state','land ('+src+')',src==='button'?'arm':'obedience')}catch(landLogErr){}
+  }
+  /* The arm button's land: what a short left-grip click while
+     hovering calls. Local and immediate — no bridge round-trip, no
+     speech recognition in the loop. No-ops when she is not up. */
+  function armButtonLand(){
+    if(!(TR.hoverHold||hoverAmt>0.05))return false;
+    beginLand('button');
+    flashObedience('COMING DOWN');
+    return true;
   }
   function exiaLandHover(){if(hoverAmt>0.001){/* hoverAmt decays in update */}hoverTime=0}
   function exiaToggleHover(){
